@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+/config.php
+/storage/
+/vendor/
+/node_modules/

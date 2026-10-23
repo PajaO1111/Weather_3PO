@@ -1,0 +1,628 @@
+/*
+ * Vlastní styly OuBrix Weather (doplněk k Bootstrapu 5.3).
+ * Barvy berou proměnné Bootstrapu, takže fungují ve světlém i tmavém motivu.
+ */
+
+:root {
+    --weather-accent: #0b7285;
+    --wx-page-bg: #eef2f6;
+    --wx-moon-dark: #495057;
+    --wx-moon-lit: #ffe066;
+    --wx-hero-shade: linear-gradient(transparent, transparent);
+}
+
+[data-bs-theme="dark"] {
+    --weather-accent: #66d9e8;
+    --wx-page-bg: #15191e;
+    --wx-moon-dark: #343a40;
+    --wx-hero-shade: linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.38));
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--wx-page-bg);
+}
+
+main {
+    flex: 1 0 auto;
+}
+
+.app-header {
+    background: var(--bs-tertiary-bg);
+}
+
+
+/* Dlaždice veličin */
+.kpi .card-body {
+    padding: 0.85rem 1rem;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.35rem;
+}
+
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.kpi-value small {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+}
+
+.kpi-note {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0;
+}
+
+
+/* Graf */
+.chart {
+    width: 100%;
+    height: 340px;
+}
+
+/* Stránka Historie: menší grafy pod sebou, tabulka se svislým posuvníkem */
+.chart.chart-history {
+    height: 280px;
+}
+
+.climate-days .list-inline-item {
+    margin-right: 1.25rem;
+}
+
+#table-details > summary {
+    cursor: pointer;
+}
+
+.history-table {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.history-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bs-body-bg);
+    z-index: 1;
+}
+
+/* Statistiky: řádek „Celkem“ a žebříčky rekordů */
+.stats-table tfoot th,
+.stats-table tfoot td {
+    border-top: 2px solid var(--bs-border-color);
+}
+
+.records-list {
+    padding-left: 1.4rem;
+}
+
+.records-list li {
+    padding: 0.1rem 0;
+}
+
+.records-value {
+    display: inline-block;
+    min-width: 5.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 575.98px) {
+    .chart.chart-history {
+        height: 240px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .chart {
+        height: 280px;
+    }
+
+    .kpi-value {
+        font-size: 1.35rem;
+    }
+
+}
+
+
+/* ==========================================================================
+   Stránka „Aktuálně“: hlavička, widgety s měřidly (SVG z gauges.js)
+   ========================================================================== */
+
+.wx-wide {
+    max-width: 1920px;
+}
+
+@media (min-width: 992px) {
+    .wx-wide {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+}
+
+/* Hlavička – pozadí podle stavu počasí a dne/noci; v tmavém motivu ztlumené */
+.wx-hero {
+    --wx-hero-bg: linear-gradient(135deg, #4dabf7, #1971c2);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    color: #fff;
+    background: var(--wx-hero-shade), var(--wx-hero-bg);
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.12);
+}
+
+.wx-hero[data-condition="partly"],
+.wx-hero[data-condition="day"] { --wx-hero-bg: linear-gradient(135deg, #74c0fc, #4263eb); }
+.wx-hero[data-condition="cloudy"] { --wx-hero-bg: linear-gradient(135deg, #8d99a6, #4a5563); }
+.wx-hero[data-condition="rain"],
+.wx-hero[data-condition="heavy-rain"] { --wx-hero-bg: linear-gradient(135deg, #6c7f99, #364152); }
+.wx-hero[data-condition="snow"] { --wx-hero-bg: linear-gradient(135deg, #a5b4cb, #5c6f8c); }
+.wx-hero[data-condition="fog"] { --wx-hero-bg: linear-gradient(135deg, #adb5bd, #6c757d); }
+.wx-hero[data-daytime="night"] { --wx-hero-bg: linear-gradient(135deg, #24345a, #0b1020); }
+.wx-hero[data-daytime="night"][data-condition="rain"],
+.wx-hero[data-daytime="night"][data-condition="heavy-rain"],
+.wx-hero[data-daytime="night"][data-condition="fog"],
+.wx-hero[data-daytime="night"][data-condition="snow"] { --wx-hero-bg: linear-gradient(135deg, #3b4658, #141a24); }
+
+.wx-hero-main {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.wx-hero-icon {
+    flex: none;
+    width: 112px;
+    height: 112px;
+}
+
+.wx-hero-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.wx-hero-temp {
+    font-size: clamp(3rem, 7vw, 4.75rem);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.wx-hero-unit {
+    font-size: 0.45em;
+    vertical-align: top;
+    margin-left: 0.1em;
+    opacity: 0.85;
+}
+
+.wx-hero-condition {
+    font-size: 1.3rem;
+    font-weight: 500;
+}
+
+#condition-label {
+    display: inline-block;
+}
+
+#condition-label::first-letter {
+    text-transform: uppercase;
+}
+
+.wx-hero-hint {
+    font-size: 0.8rem;
+    opacity: 0.75;
+    cursor: help;
+}
+
+.wx-hero-sep {
+    margin: 0 0.35rem;
+    opacity: 0.6;
+}
+
+.wx-min,
+.wx-max { white-space: nowrap; }
+.wx-min { color: #d0ebff; margin-right: 0.4rem; }
+.wx-max { color: #ffe3e3; }
+
+.wx-hero-side {
+    text-align: right;
+}
+
+.wx-hero-place {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.wx-hero-btn {
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.wx-hero-btn:hover,
+.wx-hero-btn:focus-visible {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+/* Indikátor aktuálnosti dat (pulzující tečka) */
+.wx-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.wx-live::before {
+    content: "";
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: #adb5bd;
+}
+
+.wx-live-ok::before {
+    background: #51cf66;
+    box-shadow: 0 0 0 0 rgba(81, 207, 102, 0.7);
+    animation: wx-pulse 2s infinite;
+}
+
+.wx-live-warn::before { background: #fcc419; }
+.wx-live-error::before { background: #ff6b6b; }
+
+@keyframes wx-pulse {
+    70% { box-shadow: 0 0 0 0.5rem rgba(81, 207, 102, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(81, 207, 102, 0); }
+}
+
+@media (max-width: 767.98px) {
+    .wx-hero {
+        padding: 1rem;
+    }
+
+    .wx-hero-side {
+        text-align: left;
+    }
+
+    .wx-hero-icon {
+        width: 84px;
+        height: 84px;
+    }
+}
+
+/* Mřížka widgetů: mobil 1 sloupec, od 576 px 2, od 992 px 4 */
+.wx-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 576px) {
+    .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 992px) {
+    .wx-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.wx-widget {
+    border: 0;
+    border-radius: 1rem;
+    box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.06);
+}
+
+.wx-widget .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.wx-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0;
+}
+
+.wx-value {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.wx-unit {
+    margin-left: 0.2rem;
+    font-size: 0.9rem;
+    color: var(--bs-secondary-color);
+}
+
+.wx-sub {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+}
+
+.wx-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    vertical-align: middle;
+    background: var(--bs-secondary-bg);
+}
+
+/* Údaje pod měřidlem */
+.wx-facts {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.wx-facts > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-top: 1px dashed var(--bs-border-color);
+}
+
+.wx-facts dt {
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+}
+
+.wx-facts dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.wx-facts time {
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+}
+
+.wx-facts-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    text-align: center;
+}
+
+.wx-facts-row > div {
+    display: block;
+    border-top: 0;
+}
+
+.wx-facts-row dd {
+    text-align: center;
+}
+
+/* Měřidla */
+.wx-gauge {
+    position: relative;
+    width: 100%;
+    max-width: 250px;
+    margin: 0 auto;
+}
+
+.wx-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.wx-center {
+    position: absolute;
+    left: 50%;
+    top: 63%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.wx-gauge-ring .wx-center { top: 50%; }
+.wx-center-low { top: 86%; }
+
+.wx-arc {
+    fill: none;
+    stroke-width: 14;
+    opacity: 0.2;
+}
+
+.wx-arc-on { opacity: 1; }
+
+.wx-mark {
+    fill: var(--bs-body-color);
+    opacity: 0.75;
+}
+
+.wx-mark-label,
+.wx-end-label {
+    font-size: 10px;
+    fill: var(--bs-secondary-color);
+}
+
+.wx-end-label { font-size: 11px; }
+
+.wx-knob {
+    stroke: var(--bs-body-bg);
+    stroke-width: 3;
+}
+
+.wx-needle {
+    stroke: var(--bs-body-color);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.wx-hub { fill: var(--bs-body-color); }
+
+.wx-ring {
+    fill: none;
+    stroke: var(--bs-border-color);
+    stroke-width: 2;
+}
+
+.wx-tick {
+    stroke: var(--bs-secondary-color);
+    stroke-width: 1;
+    opacity: 0.55;
+}
+
+.wx-tick-major {
+    stroke-width: 2.5;
+    opacity: 1;
+}
+
+.wx-compass-label {
+    font-size: 13px;
+    font-weight: 700;
+    fill: var(--bs-secondary-color);
+}
+
+.wx-wind-arrow {
+    stroke: var(--bs-body-bg);
+    stroke-width: 1.5;
+}
+
+.wx-rain {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.wx-rain-tube {
+    width: 100px;
+    flex: none;
+}
+
+.wx-tube {
+    fill: var(--bs-tertiary-bg);
+    stroke: var(--bs-border-color);
+    stroke-width: 2;
+}
+
+.wx-uv-value {
+    text-align: center;
+}
+
+.wx-uv-bar {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+.wx-uv { opacity: 0.25; }
+.wx-uv-on { opacity: 1; }
+.wx-uv-pointer { fill: var(--bs-body-color); }
+
+/* Slunce a Měsíc */
+.wx-sunpath {
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.wx-horizon {
+    stroke: var(--bs-border-color);
+    stroke-width: 1.5;
+}
+
+.wx-sun-track {
+    fill: none;
+    stroke: var(--bs-secondary-color);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    opacity: 0.6;
+}
+
+.wx-sun-done {
+    fill: none;
+    stroke: #fab005;
+    stroke-width: 3;
+}
+
+.wx-sun { fill: #fab005; }
+.wx-sun-glow { fill: rgba(250, 176, 5, 0.25); }
+
+.wx-moon {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--bs-border-color);
+}
+
+.wx-moon-icon {
+    flex: none;
+    width: 56px;
+    height: 56px;
+}
+
+.wx-moon-dark { fill: var(--wx-moon-dark); }
+.wx-moon-lit { fill: var(--wx-moon-lit); }
+
+/* Ikony stavu počasí */
+.wx-icon-sun circle { fill: #ffd43b; }
+.wx-icon-sun line { stroke: #ffd43b; stroke-width: 4; stroke-linecap: round; }
+.wx-icon-sun-low { opacity: 0.8; }
+.wx-icon-cloud { fill: #f8f9fa; stroke: rgba(0, 0, 0, 0.12); stroke-width: 1.5; }
+.wx-icon-cloud-back { fill: #ced4da; }
+.wx-icon-rain { stroke: #a5d8ff; stroke-width: 4; stroke-linecap: round; }
+.wx-icon-snow { stroke: #fff; stroke-width: 2.5; stroke-linecap: round; }
+.wx-icon-fog { stroke: rgba(255, 255, 255, 0.85); stroke-width: 5; stroke-linecap: round; }
+.wx-icon-star { fill: #fff; opacity: 0.85; }
+
+/* Mini-grafy 24 h */
+.wx-spark {
+    margin-top: auto;
+    height: 44px;
+    color: var(--weather-accent);
+}
+
+.wx-spark .wx-svg {
+    height: 100%;
+}
+
+.wx-spark-area {
+    stroke: none;
+    opacity: 0.14;
+}
+
+.wx-spark-line {
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wx-live-ok::before {
+        animation: none;
+    }
+}

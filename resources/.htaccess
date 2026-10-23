@@ -1,0 +1,9 @@
+# Interní složka aplikace OuBrix Weather – z webu nemá být přístupná.
+# Veřejně dostupná je pouze složka public/.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

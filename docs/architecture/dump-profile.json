@@ -1,0 +1,605 @@
+{
+  "provenance": {
+    "source": "X:\\Weather_po\\pws_observations.sql",
+    "sha256": "6cb26216fd1b8ece30fa78aaf4a1adbbdd31281c660897f42c4561835b89ca3e",
+    "bytes": 17277517,
+    "lines": 72651,
+    "method": "Strict local SQL-literal parser; entire dump; no database import. Unique times grouped by station_id+obs_time_utc; representative=min(id) for profiling only.",
+    "analyzer": "profile-weather-dump.cjs",
+    "node": "v24.22.0",
+    "icu": "78.3"
+  },
+  "insertStatements": 344,
+  "columns": [
+    "id",
+    "station_id",
+    "obs_time_utc",
+    "obs_time_local",
+    "neighborhood",
+    "software_type",
+    "country",
+    "solar_radiation",
+    "lon",
+    "lat",
+    "realtime_frequency",
+    "epoch",
+    "uv",
+    "winddir",
+    "humidity",
+    "qc_status",
+    "temp_c",
+    "heat_index",
+    "dew_point",
+    "wind_chill",
+    "wind_speed",
+    "wind_gust",
+    "pressure",
+    "precip_rate",
+    "precip_total",
+    "elevation",
+    "inserted_at"
+  ],
+  "rowCount": 72239,
+  "uniqueIds": 72239,
+  "idRange": [
+    1,
+    72239
+  ],
+  "stations": {
+    "IMOST71": 72239
+  },
+  "utcRange": [
+    "2025-09-18 15:09:52",
+    "2026-10-22 19:35:04"
+  ],
+  "localRange": [
+    "2025-09-18 17:09:52",
+    "2026-10-22 21:35:04"
+  ],
+  "qcCounts": {
+    "0": 381,
+    "1": 71849,
+    "-1": 9
+  },
+  "nullCounts": {
+    "id": 0,
+    "station_id": 0,
+    "obs_time_utc": 0,
+    "obs_time_local": 0,
+    "neighborhood": 0,
+    "software_type": 72239,
+    "country": 0,
+    "solar_radiation": 192,
+    "lon": 0,
+    "lat": 0,
+    "realtime_frequency": 72239,
+    "epoch": 0,
+    "uv": 192,
+    "winddir": 192,
+    "humidity": 192,
+    "qc_status": 0,
+    "temp_c": 192,
+    "heat_index": 192,
+    "dew_point": 192,
+    "wind_chill": 192,
+    "wind_speed": 192,
+    "wind_gust": 192,
+    "pressure": 0,
+    "precip_rate": 192,
+    "precip_total": 192,
+    "elevation": 0,
+    "inserted_at": 0
+  },
+  "distinctCounts": {
+    "id": 72239,
+    "station_id": 1,
+    "obs_time_utc": 72095,
+    "obs_time_local": 72095,
+    "neighborhood": 1,
+    "software_type": 1,
+    "country": 1,
+    "solar_radiation": 6623,
+    "lon": 1,
+    "lat": 1,
+    "realtime_frequency": 1,
+    "epoch": 72095,
+    "uv": 97,
+    "winddir": 358,
+    "humidity": 85,
+    "qc_status": 3,
+    "temp_c": 54,
+    "heat_index": 55,
+    "dew_point": 39,
+    "wind_chill": 56,
+    "wind_speed": 28,
+    "wind_gust": 33,
+    "pressure": 155,
+    "precip_rate": 12,
+    "precip_total": 79,
+    "elevation": 2,
+    "inserted_at": 72113
+  },
+  "numericStats": {
+    "id": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 1,
+      "p50": 36120,
+      "p95": 68627,
+      "max": 72239
+    },
+    "solar_radiation": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 2.6,
+      "p95": 521.1,
+      "max": 1081.9
+    },
+    "lon": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 13.643094,
+      "p50": 13.643094,
+      "p95": 13.643094,
+      "max": 13.643094
+    },
+    "lat": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 50.506896,
+      "p50": 50.506896,
+      "p95": 50.506896,
+      "max": 50.506896
+    },
+    "epoch": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 1758208192,
+      "p50": 1774821820,
+      "p95": 1785717004,
+      "max": 1792697704
+    },
+    "uv": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 0,
+      "p95": 3.7,
+      "max": 10.2
+    },
+    "winddir": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 224,
+      "p95": 317,
+      "max": 359
+    },
+    "humidity": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 16,
+      "p50": 81,
+      "p95": 99,
+      "max": 99
+    },
+    "qc_status": {
+      "count": 72239,
+      "nulls": 0,
+      "min": -1,
+      "p50": 1,
+      "p95": 1,
+      "max": 1
+    },
+    "temp_c": {
+      "count": 72047,
+      "nulls": 192,
+      "min": -13,
+      "p50": 10,
+      "p95": 27,
+      "max": 39
+    },
+    "heat_index": {
+      "count": 72047,
+      "nulls": 192,
+      "min": -13,
+      "p50": 10,
+      "p95": 27,
+      "max": 40
+    },
+    "dew_point": {
+      "count": 72047,
+      "nulls": 192,
+      "min": -15,
+      "p50": 5,
+      "p95": 17,
+      "max": 22
+    },
+    "wind_chill": {
+      "count": 72047,
+      "nulls": 192,
+      "min": -15,
+      "p50": 10,
+      "p95": 27,
+      "max": 39
+    },
+    "wind_speed": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 0,
+      "p95": 8,
+      "max": 32
+    },
+    "wind_gust": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 0,
+      "p95": 9,
+      "max": 38
+    },
+    "pressure": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 964.44,
+      "p50": 1001.69,
+      "p95": 1010.84,
+      "max": 1016.59
+    },
+    "precip_rate": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 24
+    },
+    "precip_total": {
+      "count": 72047,
+      "nulls": 192,
+      "min": 0,
+      "p50": 0,
+      "p95": 3.2,
+      "max": 31.22
+    },
+    "elevation": {
+      "count": 72239,
+      "nulls": 0,
+      "min": 77,
+      "p50": 331,
+      "p95": 331,
+      "max": 331
+    }
+  },
+  "uniqueObservationCount": 72095,
+  "duplicateGroups": 144,
+  "redundantRowsByStationUtc": 144,
+  "duplicateGroupSizeCounts": {
+    "2": 144
+  },
+  "conflictingPayloadGroups": 0,
+  "conflictExamples": [],
+  "timezoneMismatchCount": 0,
+  "timezoneMismatchExamples": [],
+  "localUtcOffsetHours": {
+    "1": 28790,
+    "2": 43449
+  },
+  "epochDifferenceSeconds": {
+    "0": 72239
+  },
+  "insertionLatencySeconds": {
+    "count": 72239,
+    "nulls": 0,
+    "min": 0,
+    "p50": 9,
+    "p95": 17,
+    "max": 1250
+  },
+  "uniqueIntervalsSeconds": {
+    "count": 72094,
+    "nulls": 0,
+    "min": 17,
+    "p50": 300,
+    "p95": 468,
+    "max": 1532904
+  },
+  "intervalBands": {
+    "upTo90s": 86,
+    "over90upTo300s": 42761,
+    "over300upTo900s": 26642,
+    "over900s": 2605
+  },
+  "largestGaps": [
+    {
+      "fromId": 8421,
+      "toId": 8422,
+      "from": "2025-10-30 17:51:52",
+      "to": "2025-11-17 11:40:16",
+      "seconds": 1532904
+    },
+    {
+      "fromId": 32557,
+      "toId": 32558,
+      "from": "2026-02-28 03:29:28",
+      "to": "2026-03-17 12:10:04",
+      "seconds": 1500036
+    },
+    {
+      "fromId": 5527,
+      "toId": 5528,
+      "from": "2025-10-11 03:26:16",
+      "to": "2025-10-20 15:35:17",
+      "seconds": 821341
+    },
+    {
+      "fromId": 26357,
+      "toId": 26358,
+      "from": "2026-01-28 02:24:40",
+      "to": "2026-02-06 13:40:04",
+      "seconds": 818124
+    },
+    {
+      "fromId": 20495,
+      "toId": 20496,
+      "from": "2025-12-30 06:50:04",
+      "to": "2026-01-05 04:50:04",
+      "seconds": 511200
+    },
+    {
+      "fromId": 40826,
+      "toId": 40827,
+      "from": "2026-04-15 06:55:52",
+      "to": "2026-04-20 20:02:04",
+      "seconds": 479172
+    },
+    {
+      "fromId": 70791,
+      "toId": 70792,
+      "from": "2026-09-14 02:59:28",
+      "to": "2026-09-18 13:40:04",
+      "seconds": 384036
+    },
+    {
+      "fromId": 44106,
+      "toId": 44107,
+      "from": "2026-05-02 05:58:52",
+      "to": "2026-05-05 21:15:04",
+      "seconds": 314172
+    }
+  ],
+  "monthlyRawCounts": {
+    "2025-09": 2723,
+    "2025-10": 5698,
+    "2025-11": 3678,
+    "2025-12": 8396,
+    "2026-01": 5862,
+    "2026-02": 6200,
+    "2026-03": 4138,
+    "2026-04": 7027,
+    "2026-05": 6818,
+    "2026-06": 8609,
+    "2026-07": 8875,
+    "2026-08": 2210,
+    "2026-09": 1082,
+    "2026-10": 923
+  },
+  "monthlyUniqueCounts": {
+    "2025-09": 2579,
+    "2025-10": 5698,
+    "2025-11": 3678,
+    "2025-12": 8396,
+    "2026-01": 5862,
+    "2026-02": 6200,
+    "2026-03": 4138,
+    "2026-04": 7027,
+    "2026-05": 6818,
+    "2026-06": 8609,
+    "2026-07": 8875,
+    "2026-08": 2210,
+    "2026-09": 1082,
+    "2026-10": 923
+  },
+  "daysWithObservations": 334,
+  "inclusiveCalendarDays": 400,
+  "monthlyIntervalStats": {
+    "2025-09": {
+      "count": 2578,
+      "nulls": 0,
+      "min": 24,
+      "p50": 300,
+      "p95": 456,
+      "max": 3722
+    },
+    "2025-10": {
+      "count": 5697,
+      "nulls": 0,
+      "min": 17,
+      "p50": 300,
+      "p95": 420,
+      "max": 821341
+    },
+    "2025-11": {
+      "count": 3677,
+      "nulls": 0,
+      "min": 21,
+      "p50": 300,
+      "p95": 417,
+      "max": 58356
+    },
+    "2025-12": {
+      "count": 8395,
+      "nulls": 0,
+      "min": 24,
+      "p50": 300,
+      "p95": 409,
+      "max": 1548
+    },
+    "2026-01": {
+      "count": 5861,
+      "nulls": 0,
+      "min": 48,
+      "p50": 300,
+      "p95": 420,
+      "max": 206618
+    },
+    "2026-02": {
+      "count": 6199,
+      "nulls": 0,
+      "min": 24,
+      "p50": 300,
+      "p95": 408,
+      "max": 888
+    },
+    "2026-03": {
+      "count": 4137,
+      "nulls": 0,
+      "min": 85,
+      "p50": 300,
+      "p95": 407,
+      "max": 804
+    },
+    "2026-04": {
+      "count": 7026,
+      "nulls": 0,
+      "min": 48,
+      "p50": 300,
+      "p95": 408,
+      "max": 479172
+    },
+    "2026-05": {
+      "count": 6817,
+      "nulls": 0,
+      "min": 24,
+      "p50": 300,
+      "p95": 408,
+      "max": 314172
+    },
+    "2026-06": {
+      "count": 8608,
+      "nulls": 0,
+      "min": 60,
+      "p50": 300,
+      "p95": 396,
+      "max": 2424
+    },
+    "2026-07": {
+      "count": 8874,
+      "nulls": 0,
+      "min": 48,
+      "p50": 300,
+      "p95": 396,
+      "max": 3553
+    },
+    "2026-08": {
+      "count": 2209,
+      "nulls": 0,
+      "min": 108,
+      "p50": 408,
+      "p95": 3600,
+      "max": 4860
+    },
+    "2026-09": {
+      "count": 1081,
+      "nulls": 0,
+      "min": 180,
+      "p50": 2089,
+      "p95": 3768,
+      "max": 384036
+    },
+    "2026-10": {
+      "count": 922,
+      "nulls": 0,
+      "min": 155,
+      "p50": 2089,
+      "p95": 3612,
+      "max": 4068
+    }
+  },
+  "elevationCounts": {
+    "77": 5528,
+    "331": 66711
+  },
+  "elevationTransitions": [
+    {
+      "fromId": 5528,
+      "toId": 5529,
+      "from": "2025-10-20 15:35:17",
+      "to": "2025-10-20 15:40:04",
+      "before": 77,
+      "after": 331,
+      "pressureBefore": 991.53,
+      "pressureAfter": 991.53
+    }
+  ],
+  "missingTemperatureByQc": {
+    "1": 192
+  },
+  "directionMissingWhileWindPositive": 0,
+  "windZeroRawCount": 43790,
+  "windZeroUniqueCount": 43690,
+  "fractionalTemperatureCount": 0,
+  "rainDecreases": {
+    "all": 99,
+    "sameDay": 0,
+    "examples": []
+  },
+  "midnightRainExamples": [
+    {
+      "fromId": 158,
+      "toId": 160,
+      "from": "2025-09-21 23:02:23",
+      "to": "2025-09-22 00:03:52",
+      "before": 20.4,
+      "after": 0,
+      "seconds": 3689
+    },
+    {
+      "fromId": 423,
+      "toId": 424,
+      "from": "2025-09-22 23:55:03",
+      "to": "2025-09-23 00:04:04",
+      "before": 9.19,
+      "after": 0,
+      "seconds": 541
+    },
+    {
+      "fromId": 1001,
+      "toId": 1002,
+      "from": "2025-09-24 23:55:16",
+      "to": "2025-09-25 00:04:18",
+      "before": 0.41,
+      "after": 0.41,
+      "seconds": 542
+    },
+    {
+      "fromId": 1289,
+      "toId": 1290,
+      "from": "2025-09-25 23:55:17",
+      "to": "2025-09-26 00:04:04",
+      "before": 31.22,
+      "after": 0,
+      "seconds": 527
+    },
+    {
+      "fromId": 1577,
+      "toId": 1578,
+      "from": "2025-09-26 23:55:28",
+      "to": "2025-09-27 00:03:41",
+      "before": 0.41,
+      "after": 0,
+      "seconds": 493
+    },
+    {
+      "fromId": 3736,
+      "toId": 3737,
+      "from": "2025-10-04 23:55:52",
+      "to": "2025-10-05 00:04:04",
+      "before": 4.8,
+      "after": 0,
+      "seconds": 492
+    }
+  ]
+}
