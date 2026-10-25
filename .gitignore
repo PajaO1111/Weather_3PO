@@ -5,3 +5,8 @@
 /storage/
 /vendor/
 /node_modules/
+
+# Podklady a dokumentace zůstávají lokálně; README.md je výjimka.
+*.pdf
+*.md
+!README.md

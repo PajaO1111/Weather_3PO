@@ -18,6 +18,7 @@ use OuBrix\Weather\Http\Api;
 use OuBrix\Weather\Http\Validation\StatsQuery;
 use OuBrix\Weather\Weather\Repositories\AggregateCache;
 use OuBrix\Weather\Weather\Repositories\ObservationRepository;
+use OuBrix\Weather\Weather\Repositories\WeatherAggregateRepository;
 use OuBrix\Weather\Weather\Services\StatsService;
 
 Api::run(static function (PDO $pdo, string $station) {
@@ -27,6 +28,14 @@ Api::run(static function (PDO $pdo, string $station) {
     $query = StatsQuery::parse($_GET, $now, $settings);
 
     $repository = new ObservationRepository($pdo);
-    $service = new StatsService($repository, $timezone, AggregateCache::fromSettings($repository, $timezone, $settings));
+    $dailyAggregates = !empty($settings['weather_daily_aggregate_cache'])
+        ? new WeatherAggregateRepository($pdo, $timezone)
+        : null;
+    $service = new StatsService(
+        $repository,
+        $timezone,
+        AggregateCache::fromSettings($repository, $timezone, $settings),
+        $dailyAggregates
+    );
     return $service->build($station, $query['period'], $now);
 });

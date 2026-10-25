@@ -8,6 +8,7 @@
  */
 import { fetchJson, fillFields, formatNumber, formatTime } from './api.js';
 import { themeColors } from './charts.js';
+import { createWeekPanel } from './week.js';
 
 const root = document.getElementById('stats');
 const form = document.getElementById('stats-form');
@@ -288,3 +289,9 @@ document.addEventListener('weather:themechange', () => renderChart(state.data));
 window.addEventListener('resize', () => chart && chart.resize());
 
 load();
+
+// Paprskový graf 7 dní nezávisí na zvoleném roce.
+const weekSection = document.getElementById('week');
+if (weekSection) {
+    createWeekPanel(weekSection).load();
+}

@@ -626,3 +626,20 @@ main {
         animation: none;
     }
 }
+/* Paprskový graf 7 dní (Statistiky) */
+.chart.chart-radar {
+    height: 480px;
+}
+
+.wx-week-metrics .btn {
+    --bs-btn-padding-y: .2rem;
+    --bs-btn-padding-x: .55rem;
+    --bs-btn-font-size: .8125rem;
+    border-radius: 999px;
+}
+
+@media (max-width: 575.98px) {
+    .chart.chart-radar {
+        height: 400px;
+    }
+}

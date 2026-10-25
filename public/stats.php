@@ -37,5 +37,6 @@ echo View::page('pages/stats', [
     'pageScript' => 'js/stats.js',
     'period' => $query['period'],
     'currentYear' => (int) $now->format('Y'),
+    'timezone' => (string) $settings['timezone'],
     'notice' => $notice,
 ], 'layouts/main');

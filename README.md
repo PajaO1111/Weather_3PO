@@ -69,6 +69,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │       ├── Services/HistoryService.php              historie: hodinové/denní agregace, souhrn období
 │       ├── Services/HistoryCsv.php                  převod historie na CSV
 │       ├── Services/StatsService.php                statistiky po měsících/letech, žebříčky rekordů
+│       ├── Services/WindRoseService.php             větrná růžice (16 směrů × třídy rychlosti)
 │       ├── Support/Meteo.php                        směr větru, pocitová teplota, UV, tendence, Beaufort, odhad stavu
 │       └── Support/Astro.php                        východ/západ Slunce, výška Slunce, fáze Měsíce
 ├── public/                           JEDINÁ veřejná složka
@@ -80,7 +81,8 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── current.php               aktuální stav stanice (JSON)
 │   │   ├── observations.php          posledních N měření (JSON)
 │   │   ├── history.php               měření za zvolené období (JSON / CSV)
-│   │   └── stats.php                 statistiky a rekordy za rok / celé období (JSON)
+│   │   ├── stats.php                 statistiky a rekordy za rok / celé období (JSON)
+│   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
 │       └── js/
@@ -89,7 +91,8 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │           ├── charts.js             graf ECharts (teplota/tlak/vítr/srážky)
 │           ├── gauges.js             SVG měřidla (oblouk, kompas, srážkoměr, UV, dráha Slunce, Měsíc, ikony, mini-grafy)
 │           ├── history.js            stránka „Historie“: období, souhrn, 6 propojených grafů, tabulka
-│           └── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
+│           ├── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
+│           └── week.js               paprskový graf 7 dní (24 h × den) a větrná růžice
 ├── resources/views/
 │   ├── layouts/main.php              HTML kostra, knihovny
 │   ├── partials/header.php, footer.php   hlavička s menu (Aktuálně, Historie, Statistiky)
@@ -154,6 +157,7 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
 | 6 | `https://oubrix.eu/Weather/public/history.php` | stránka „Historie“ – posledních 7 dní po hodinách |
 | 7 | `https://oubrix.eu/Weather/public/api/stats.php?year=all` | JSON s `years`, `rows` (roky), `total`, `records` |
 | 8 | `https://oubrix.eu/Weather/public/stats.php` | stránka „Statistiky“ – letošní rok po měsících |
+| 8a | `https://oubrix.eu/Weather/public/api/windrose.php` | JSON se 16 `sectors`, `classes`, `calm`, `prevailing` |
 | 9 | `https://oubrix.eu/Weather/app/` | 403 Forbidden (ochrana interních složek) |
 
 ### Řešení potíží
@@ -296,6 +300,19 @@ Odpověď:
 Vychází z denních agregací `HistoryService`. Průměry, ledové dny, tropické noci,
 „nejteplejší noci“, „nejchladnější dny“ a denní rozpětí se počítají jen z
 **úplných dnů** (data alespoň z 18 hodin) – den s výpadkem stanice by je zkreslil.
+
+Pod grafem „Teplota a srážky po měsících“ je **paprskový graf posledních 7 dní**
+(`week.js`): 24 paprsků = hodiny místního času (0 h nahoře, po směru hodin),
+jedna křivka = jeden den, dnešek oranžově. Přepíná se teplota, rosný bod, vlhkost,
+tlak, nárazy, srážky, záření a UV (data z `api/history.php?resolution=hour`);
+volba „Vítr (růžice)“ zobrazí větrnou růžici z `api/windrose.php`.
+
+### `api/windrose.php?hours=N`
+
+Větrná růžice za posledních `N` hodin (výchozí a maximum 168). Odpověď:
+`sectors` (16 směrů od S), `classes` (`from`, `to`, `label`, `percent[16]`),
+`calm` (% bezvětří < 1 km/h), `samples`, `prevailing`, `speedAvg`, `speedMax`,
+`from`, `to`, `truncated`. Neplatné `hours` → 400.
 
 ### `api/health.php`
 

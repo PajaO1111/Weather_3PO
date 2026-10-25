@@ -43,7 +43,7 @@ use OuBrix\Weather\Http\View;
 // Hosting posílá JS s cache na 30 dní; bez verze by prohlížeč mohl spojit
 // nový skript stránky se starým api.js a stránka by spadla.
 $modules = [];
-foreach (['js/api.js', 'js/charts.js', 'js/gauges.js'] as $module) {
+foreach (['js/api.js', 'js/charts.js', 'js/gauges.js', 'js/week.js'] as $module) {
     $modules[$baseUrl . '/assets/' . $module] = View::asset($module);
 }
 ?>

@@ -21,6 +21,7 @@ function check(bool $condition, string $message): void
 $files = [
     'Unit/MeteoTest.php',
     'Unit/AstroTest.php',
+    'Unit/WindRoseTest.php',
     'Unit/QueryTest.php',
     'Unit/ViewTest.php',
     'Unit/DatabaseTest.php',
@@ -29,6 +30,7 @@ $files = [
     'Unit/HistoryServiceTest.php',
     'Unit/StatsServiceTest.php',
     'Unit/AggregateCacheTest.php',
+    'Unit/WeatherAggregateRepositoryTest.php',
     'Integration/CurrentConditionsTest.php',
     'Integration/HttpTest.php',
 ];

@@ -57,6 +57,10 @@ return [
     'aggregate_cache' => true,
     'aggregate_cache_dir' => null,
 
+    // Databázové denní agregace jsou aktivní po ověření tabulek weather_daily,
+    // weather_monthly a weather_yearly v produkční databázi.
+    'weather_daily_aggregate_cache' => true,
+
     // Pevné verze knihoven z CDN včetně SRI otisků (CSP domény povoluje cdn.jsdelivr.net).
     'cdn' => [
         'bootstrap_css' => [

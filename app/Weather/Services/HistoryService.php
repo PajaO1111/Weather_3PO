@@ -23,6 +23,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use OuBrix\Weather\Weather\Repositories\AggregateCache;
 use OuBrix\Weather\Weather\Repositories\ObservationRepository;
+use OuBrix\Weather\Weather\Repositories\WeatherAggregateRepository;
 use OuBrix\Weather\Weather\Support\Meteo;
 use UnexpectedValueException;
 
@@ -64,13 +65,22 @@ final class HistoryService
     /** @var AggregateCache zdroj hodinových agregací, souhrnu a extrémů (cache uzavřených měsíců) */
     private $aggregates;
 
-    public function __construct(ObservationRepository $repository, DateTimeZone $timezone, ?AggregateCache $aggregates = null)
+    /** @var WeatherAggregateRepository|null cache denních agregací v databázi */
+    private $dailyAggregates;
+
+    public function __construct(
+        ObservationRepository $repository,
+        DateTimeZone $timezone,
+        ?AggregateCache $aggregates = null,
+        ?WeatherAggregateRepository $dailyAggregates = null
+    )
     {
         $this->repository = $repository;
         $this->timezone = $timezone;
         $this->utc = new DateTimeZone('UTC');
         // Bez cache = průchozí režim (vše živě z DB).
         $this->aggregates = $aggregates ?? new AggregateCache($repository, $timezone, null);
+        $this->dailyAggregates = $dailyAggregates;
     }
 
     /**
@@ -89,9 +99,13 @@ final class HistoryService
         $fromDb = $fromUtc->format(self::DB_FORMAT);
         $toDb = $toUtc->format(self::DB_FORMAT);
 
-        // Hodiny jsou potřeba vždy – skládají se z nich dny a souhrn období.
-        $hours = $this->hours($this->aggregates->hourly($station, $fromDb, $toDb));
-        $days = $this->days($hours);
+        if ($resolution === 'day' && $this->dailyAggregates !== null) {
+            $days = $this->cachedDays($station, $fromLocal, $toLocal);
+        } else {
+            // Pro hodinový a surový výstup se denní kbelíky skládají z hodin.
+            $hours = $this->hours($this->aggregates->hourly($station, $fromDb, $toDb));
+            $days = $this->days($hours);
+        }
 
         $meta = [];
         if ($resolution === 'raw') {
@@ -274,6 +288,7 @@ final class HistoryService
             if ($tmin !== null && $tmin < self::FROST_DAY_MIN) {
                 $counts['frost']++;
             }
+
             if ($tmax !== null && $tmax < self::ICE_DAY_MAX) {
                 $counts['ice']++;
             }
@@ -322,6 +337,69 @@ final class HistoryService
             'solar_max' => $value('solar_max'),
             'days' => $counts,
         ];
+    }
+
+    /**
+     * Použije uzavřené dny z DB a dopočítá chybějící či dosud neuzavřené úseky.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function cachedDays(string $station, DateTimeImmutable $fromLocal, DateTimeImmutable $toLocal): array
+    {
+        $dates = $this->calendarDays($fromLocal, $toLocal);
+        if ($dates === []) {
+            return [];
+        }
+        $storedRows = $this->dailyAggregates->days($station, $dates[0], $dates[count($dates) - 1]);
+        $settledRows = [];
+        foreach ($storedRows as $date => $row) {
+            if ($this->dailyAggregates->isSettled($date)) {
+                $settledRows[$date] = $row;
+            }
+        }
+        $days = $this->dailyAggregates->buckets($settledRows);
+        $rangeStart = null;
+        $rangeEnd = null;
+        $toPersist = [];
+
+        $flush = function () use (&$rangeStart, &$rangeEnd, &$days, &$toPersist, $station): void {
+            if ($rangeStart === null || $rangeEnd === null) {
+                return;
+            }
+            $fromUtc = $rangeStart->setTimezone($this->utc)->format(self::DB_FORMAT);
+            $toUtc = $rangeEnd->add(new DateInterval('P1D'))->setTimezone($this->utc)->format(self::DB_FORMAT);
+            $freshDays = $this->days($this->hours($this->aggregates->hourly($station, $fromUtc, $toUtc)));
+            foreach ($freshDays as $day) {
+                $days[$day['date']] = $day;
+            }
+            if ($toPersist !== []) {
+                $this->dailyAggregates->saveDays($station, $freshDays, $toPersist);
+            }
+            $rangeStart = null;
+            $rangeEnd = null;
+            $toPersist = [];
+        };
+
+        foreach ($dates as $date) {
+            if (isset($settledRows[$date])) {
+                $flush();
+                continue;
+            }
+
+            $localDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date, $this->timezone);
+            if ($localDate === false) {
+                throw new UnexpectedValueException('INVALID_STORED_TIME');
+            }
+            $rangeStart = $rangeStart ?? $localDate;
+            $rangeEnd = $localDate;
+            if ($this->dailyAggregates->isSettled($date)) {
+                $toPersist[] = $date;
+            }
+        }
+        $flush();
+
+        ksort($days);
+        return array_values($days);
     }
 
     /** @return array{value: float|null, time: string}|null */

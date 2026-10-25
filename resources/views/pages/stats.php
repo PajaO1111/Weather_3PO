@@ -10,6 +10,7 @@
  * @var string      $period       „RRRR“ nebo „all“
  * @var int         $currentYear
  * @var string|null $notice
+ * @var string      $timezone     časové pásmo stanice (paprskový graf 7 dní)
  */
 use OuBrix\Weather\Http\View;
 
@@ -120,6 +121,31 @@ $selected = $period === 'all' ? 'all' : (string) $period;
         <div class="card-body">
             <h2 class="h6" id="chart-title">Teplota a srážky</h2>
             <div class="chart chart-history" id="chart-stats" role="img" aria-label="Graf průměrných teplot a úhrnu srážek"></div>
+        </div>
+    </section>
+
+    <!-- Paprskový graf: denní chod za posledních 7 dní (24 paprsků = hodiny) -->
+    <section class="card mb-3" aria-labelledby="week-title" id="week"
+             data-api-history="<?= View::e($baseUrl) ?>/api/history.php"
+             data-api-windrose="<?= View::e($baseUrl) ?>/api/windrose.php?hours=168"
+             data-timezone="<?= View::e($timezone) ?>">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <h2 class="h6 mb-0 me-auto" id="week-title">Posledních 7 dní – denní chod</h2>
+                <div class="d-flex flex-wrap gap-1 wx-week-metrics" role="group" aria-label="Veličina v paprskovém grafu" id="week-metrics">
+                    <button type="button" class="btn btn-outline-secondary active" data-metric="temp" aria-pressed="true">Teplota</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="dew" aria-pressed="false">Rosný bod</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="humidity" aria-pressed="false">Vlhkost</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="pressure" aria-pressed="false">Tlak</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="windrose" aria-pressed="false">Vítr (růžice)</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="gust" aria-pressed="false">Nárazy</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="precip" aria-pressed="false">Srážky</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="solar" aria-pressed="false">Záření</button>
+                    <button type="button" class="btn btn-outline-secondary" data-metric="uv" aria-pressed="false">UV</button>
+                </div>
+            </div>
+            <div id="week-chart" class="chart chart-radar" role="img" aria-label="Paprskový graf za posledních 7 dní"></div>
+            <p class="small text-body-secondary mb-0" id="week-note"></p>
         </div>
     </section>
 

@@ -21,6 +21,7 @@ use DateTimeZone;
 use OuBrix\Weather\Http\Validation\StatsQuery;
 use OuBrix\Weather\Weather\Repositories\AggregateCache;
 use OuBrix\Weather\Weather\Repositories\ObservationRepository;
+use OuBrix\Weather\Weather\Repositories\WeatherAggregateRepository;
 
 final class StatsService
 {
@@ -61,10 +62,15 @@ final class StatsService
     /** @var DateTimeZone */
     private $timezone;
 
-    public function __construct(ObservationRepository $repository, DateTimeZone $timezone, ?AggregateCache $aggregates = null)
+    public function __construct(
+        ObservationRepository $repository,
+        DateTimeZone $timezone,
+        ?AggregateCache $aggregates = null,
+        ?WeatherAggregateRepository $dailyAggregates = null
+    )
     {
         $this->repository = $repository;
-        $this->history = new HistoryService($repository, $timezone, $aggregates);
+        $this->history = new HistoryService($repository, $timezone, $aggregates, $dailyAggregates);
         $this->timezone = $timezone;
     }
 

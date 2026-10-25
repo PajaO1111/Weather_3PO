@@ -20,6 +20,7 @@ use OuBrix\Weather\Http\Api;
 use OuBrix\Weather\Http\Validation\HistoryQuery;
 use OuBrix\Weather\Weather\Repositories\AggregateCache;
 use OuBrix\Weather\Weather\Repositories\ObservationRepository;
+use OuBrix\Weather\Weather\Repositories\WeatherAggregateRepository;
 use OuBrix\Weather\Weather\Services\HistoryCsv;
 use OuBrix\Weather\Weather\Services\HistoryService;
 
@@ -29,7 +30,15 @@ Api::run(static function (PDO $pdo, string $station) {
     $query = HistoryQuery::parse($_GET, new DateTimeImmutable('now', $timezone), $settings);
 
     $repository = new ObservationRepository($pdo);
-    $service = new HistoryService($repository, $timezone, AggregateCache::fromSettings($repository, $timezone, $settings));
+    $dailyAggregates = !empty($settings['weather_daily_aggregate_cache'])
+        ? new WeatherAggregateRepository($pdo, $timezone)
+        : null;
+    $service = new HistoryService(
+        $repository,
+        $timezone,
+        AggregateCache::fromSettings($repository, $timezone, $settings),
+        $dailyAggregates
+    );
     $history = $service->build($station, $query['from'], $query['to'], $query['resolution'], (int) $settings['history_raw_max_rows']);
 
     return $query['format'] === 'csv' ? HistoryCsv::response($history, $timezone) : $history;

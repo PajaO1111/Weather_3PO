@@ -92,7 +92,12 @@ return static function (): int {
         [$status, , $body] = $request('/api/stats.php?year=all');
         check($status === 200 && json_decode($body, true)['period']['group'] === 'year', 'stats api all');
         check($request('/api/stats.php?year=1999')[0] === 400, 'stats invalid 400');
-        return 28;
+        check(strpos($request('/stats.php')[2], 'data-api-windrose="/api/windrose.php?hours=168"') !== false, 'stats page has radar section');
+        [$status, $type, $body] = $request('/api/windrose.php');
+        $rose = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0 && count($rose['sectors']) === 16 && $rose['hours'] === 168, 'windrose api json');
+        check($request('/api/windrose.php?hours=0')[0] === 400, 'windrose invalid 400');
+        return 32;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {
