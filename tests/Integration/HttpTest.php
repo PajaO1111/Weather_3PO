@@ -93,11 +93,26 @@ return static function (): int {
         check($status === 200 && json_decode($body, true)['period']['group'] === 'year', 'stats api all');
         check($request('/api/stats.php?year=1999')[0] === 400, 'stats invalid 400');
         check(strpos($request('/stats.php')[2], 'data-api-windrose="/api/windrose.php?hours=168"') !== false, 'stats page has radar section');
+        [$status, $type, $body] = $request('/analytics.php');
+        check($status === 200 && strpos($type, 'text/html') === 0 && strpos($body, 'data-api-analytics="/api/analytics.php"') !== false, 'analytics page');
+        check(strpos($body, 'href="/analytics.php"') !== false && strpos($body, 'js/analytics.js') !== false, 'analytics page navigation and module');
+        [$status, $type, $body] = $request('/api/analytics.php');
+        $analytics = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0, 'analytics api json');
+        check(isset($analytics['periods']['30'], $analytics['periods']['60'], $analytics['periods']['90'])
+            && isset($analytics['meta']['timezone'], $analytics['meta']['generatedAt']), 'analytics api includes bounded rainfall windows and metadata');
         [$status, $type, $body] = $request('/api/windrose.php');
         $rose = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0 && count($rose['sectors']) === 16 && $rose['hours'] === 168, 'windrose api json');
         check($request('/api/windrose.php?hours=0')[0] === 400, 'windrose invalid 400');
-        return 32;
+
+        [$status, $type, $body] = $request('/air-quality.php');
+        check($status === 200 && strpos($type, 'text/html') === 0, 'air quality page 200 html');
+        check(strpos($body, 'data-api-air-quality="/api/air-quality.php"') !== false
+            && strpos($body, 'Ovzduší ČHMÚ') !== false
+            && strpos($body, 'PM2,5') !== false, 'air quality page has API, navigation and pollutants');
+        check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
+        return 39;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

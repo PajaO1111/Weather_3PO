@@ -61,6 +61,9 @@ return [
     // weather_monthly a weather_yearly v produkční databázi.
     'weather_daily_aggregate_cache' => true,
 
+    // Veřejná data ČHMÚ (složka zůstává mimo public/ a je v .gitignore).
+    'chmi_cache_dir' => null,
+
     // Pevné verze knihoven z CDN včetně SRI otisků (CSP domény povoluje cdn.jsdelivr.net).
     'cdn' => [
         'bootstrap_css' => [

@@ -5,9 +5,10 @@ Data **pouze čte** z původní tabulky `pws_observations`, kterou dál plní
 beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 (`history.php`, `history5.php`) zůstávají funkční.
 
-> Stav: **1. část – stránka „Aktuálně“** (hlavička s odhadem stavu počasí,
-> 8 widgetů s SVG měřidly a mini-grafy 24 h, Slunce a Měsíc, graf 24 h,
-> dnešní souhrn, údaje o stanici). Další části viz [Plán rozšíření](#plán-rozšíření).
+> Stav: **Fáze 1 dokončena; Fáze 2 a Fáze 3 jsou rozpracované v pracovním stromu.**
+> Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
+> stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
+> a cache s viditelným stavem zastaralosti. Další plán viz [Plán rozšíření](#plán-rozšíření).
 
 ## Požadavky
 
@@ -24,16 +25,17 @@ se načítají z `cdn.jsdelivr.net` s pevnou verzí a SRI otiskem
 ## Architektura v kostce
 
 ```
-Prohlížeč ──GET──► public/index.php, history.php, stats.php ──► resources/views (HTML kostra)
+Prohlížeč ──GET──► public/index.php, history.php, stats.php, analytics.php, air-quality.php ──► resources/views (HTML kostra)
     │
     └─JS fetch──► public/api/current.php ──┐
                   public/api/observations.php ─► app/Http/Api (chyby, GET)
                   public/api/history.php ─────┤
-                  public/api/stats.php ───────┘
+                  public/api/stats.php ───────┤
+                  public/api/analytics.php ───┤
+                  public/api/air-quality.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
                                                ─► app/Weather/Services (logika)
                                                ─► app/Weather/Repositories (SQL)
-                                               ─► app/Infrastructure/Database (PDO)
-                                               ─► původní config.php + DB
+                                               ─► app/Infrastructure/Database (PDO) ─► původní config.php + DB
 ```
 
 - **HTML** = PHP šablony (layout + partials + stránky), bez dat z DB.
@@ -69,6 +71,9 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │       ├── Services/HistoryService.php              historie: hodinové/denní agregace, souhrn období
 │       ├── Services/HistoryCsv.php                  převod historie na CSV
 │       ├── Services/StatsService.php                statistiky po měsících/letech, žebříčky rekordů
+│       ├── Services/AnalyticsService.php            naměřené srážky za 30/60/90 dní a úplnost dat
+│   ├── Services/AirQualityService.php           normalizace ovzduší, kvality hodnot a metadat ČHMÚ
+│   ├── Gateways/ChmiGateway.php                 allowlist HTTPS zdrojů ČHMÚ, limity, timeout a cache
 │       ├── Services/WindRoseService.php             větrná růžice (16 směrů × třídy rychlosti)
 │       ├── Support/Meteo.php                        směr větru, pocitová teplota, UV, tendence, Beaufort, odhad stavu
 │       └── Support/Astro.php                        východ/západ Slunce, výška Slunce, fáze Měsíce
@@ -76,12 +81,16 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   ├── index.php                     stránka „Aktuálně“
 │   ├── history.php                   stránka „Historie“
 │   ├── stats.php                     stránka „Statistiky a rekordy“
+│   ├── analytics.php                 stránka „Analytika“ (srážky za 30/60/90 dní)
+│   ├── air-quality.php             stránka kvality ovzduší ČHMÚ (Most / UMOM)
 │   ├── api/
 │   │   ├── health.php                diagnostika nasazení (PHP, config, DB)
 │   │   ├── current.php               aktuální stav stanice (JSON)
 │   │   ├── observations.php          posledních N měření (JSON)
 │   │   ├── history.php               měření za zvolené období (JSON / CSV)
 │   │   ├── stats.php                 statistiky a rekordy za rok / celé období (JSON)
+│   │   ├── analytics.php             naměřené srážky a úplnost dat (JSON)
+│   │   ├── air-quality.php            aktuální kvalita ovzduší ČHMÚ pro UMOM (JSON)
 │   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
@@ -92,13 +101,16 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │           ├── gauges.js             SVG měřidla (oblouk, kompas, srážkoměr, UV, dráha Slunce, Měsíc, ikony, mini-grafy)
 │           ├── history.js            stránka „Historie“: období, souhrn, 6 propojených grafů, tabulka
 │           ├── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
+│           ├── analytics.js          stránka „Analytika“: srážky, období a úplnost dat
+│           ├── air-quality.js        stránka „Ovzduší ČHMÚ“: validované hodinové hodnoty UMOM
 │           └── week.js               paprskový graf 7 dní (24 h × den) a větrná růžice
 ├── resources/views/
 │   ├── layouts/main.php              HTML kostra, knihovny
 │   ├── partials/header.php, footer.php   hlavička s menu (Aktuálně, Historie, Statistiky)
 │   ├── pages/dashboard.php           obsah stránky „Aktuálně“
 │   ├── pages/history.php             obsah stránky „Historie“
-│   └── pages/stats.php               obsah stránky „Statistiky a rekordy“
+│   ├── pages/stats.php               obsah stránky „Statistiky a rekordy“
+│   └── pages/analytics.php           obsah stránky „Analytika“
 ├── bin/check-connection.php          kontrola DB z příkazové řádky (ne z webu)
 ├── storage/cache/aggregates/         soubory cache (vytváří aplikace, lze kdykoli smazat)
 ├── tests/                            testy (spouští se lokálně, na hosting se nenahrávají)
@@ -320,6 +332,41 @@ Diagnostika nasazení: verze PHP (major.minor), `pdoMysql`, `config`,
 `database`, `latestObservationUtc`, `cache` (`ok` / `disabled` / `not_writable`).
 Po odladění lze soubor smazat.
 
+### `api/air-quality.php`
+
+Aktuální hodinová data stanice ČHMÚ **Most (UMOM)** načítá serverově z pevně
+povolených adres `opendata.chmi.cz`; prohlížeč nekomunikuje s ČHMÚ přímo.
+API vrací PM10, PM2,5, NO2, SO2 a O3 pouze tehdy, pokud metadata potvrzují
+aktivní měření, jednotku a platný typ hodnoty. Typy 5–7 (vyřazeno/chyba) se
+nezobrazují jako koncentrace; typy 10–11 jsou označeny jako substituce.
+Hodnoty `null`, chybějící řádky a neplatné kódy zůstávají odlišné od nuly.
+
+Index kvality ovzduší se zobrazí pouze tehdy, pokud jej metadata UMOM označují
+jako aktuální a záznam má úplný typ indexu. V ověřených metadatech UMOM tento
+index není publikován jako real-time, proto stránka jeho nedostupnost vysvětluje
+a nesnaží se jej odvozovat z koncentrací.
+
+Metadata se ukládají na 24 hodin, hodinová data na 15 minut a číselníky na
+30 dní do neveřejné `storage/cache/chmi/`. Při nedostupnosti upstreamu lze
+zobrazit poslední cache s viditelným varováním a časem načtení; bez cache API
+vrátí `503 CHMI_UNAVAILABLE`, nikoli prázdnou „úspěšnou“ odpověď. Současný
+datový soubor je snímek, nikoli ověřená 24hodinová či sedmidenní časová řada;
+graf historie proto zatím není součástí stránky.
+
+Pro každou látku UMOM se navíc samostatně uchovává poslední platná koncentrace
+v `storage/cache/chmi/air_last_valid_umom.json`. Chybový kód ani chybějící
+řádek nového CSV tuto hodnotu nepřepíše. API v takovém případě vrací
+`status: last_valid`, původní čas a typ hodnoty, `ageSeconds` a důvod
+nedostupnosti nového měření. Stránka pod hodnotou uvádí, že není aktuální,
+a její stáří v hodinách a minutách. Nová platná hodnota (včetně nuly) zobrazení
+obnoví; starší snímek nesmí přepsat novější uložený údaj.
+
+Úložiště vyžaduje právo zápisu pro PHP a nepodléhá 15minutové expiraci snímku.
+Při chybě zápisu se zobrazí varování. Uchovávají se pouze hodnoty, které
+aplikace skutečně načetla při požadavku na API; nejde o průběžný sběr CRONem
+ani o automatické doplnění starší historie ČHMÚ. Pokud žádná platná hodnota
+ještě nebyla zachycena, zůstává koncentrace nedostupná.
+
 ## Lokální vývoj a testy
 
 ```powershell
@@ -328,7 +375,7 @@ php tests/run.php
 
 # lokální náhled bez produkční DB (testovací data 26 h)
 php -S 127.0.0.1:8765 -t public tests/support/router.php
-# → http://127.0.0.1:8765/index.php, /history.php, /stats.php
+# → http://127.0.0.1:8765/index.php, /history.php, /stats.php, /analytics.php, /air-quality.php
 
 # kontrola spojení s produkční DB (na serveru přes SSH)
 php bin/check-connection.php

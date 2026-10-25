@@ -1,0 +1,278 @@
+<?php
+/**
+ * Serverový klient pro pevně vymezené zdroje OpenData ČHMÚ.
+ */
+declare(strict_types=1);
+
+namespace OuBrix\Weather\Weather\Gateways;
+
+use Closure;
+use DateTimeImmutable;
+use DateTimeZone;
+use RuntimeException;
+use Throwable;
+
+final class ChmiGateway
+{
+    private const BASE_URL = 'https://opendata.chmi.cz';
+
+    /** @var array<string, array{path: string, ttl: int, maxBytes: int}> */
+    private const RESOURCES = [
+        'air_metadata' => [
+            'path' => '/air_quality/now/metadata/metadata.json',
+            'ttl' => 86400,
+            'maxBytes' => 2500000,
+        ],
+        'air_values' => [
+            'path' => '/air_quality/now/data/airquality_1h_avg_CZ.csv',
+            'ttl' => 900,
+            'maxBytes' => 250000,
+        ],
+        'value_types' => [
+            'path' => '/air_quality/now/metadata/ValueType.csv',
+            'ttl' => 2592000,
+            'maxBytes' => 25000,
+        ],
+        'index_levels' => [
+            'path' => '/air_quality/now/metadata/AirQualityIndex.csv',
+            'ttl' => 2592000,
+            'maxBytes' => 25000,
+        ],
+    ];
+
+    /** @var string|null */
+    private $cacheDirectory;
+
+    /** @var Closure(string, int): string */
+    private $transport;
+
+    /** @var DateTimeImmutable */
+    private $now;
+
+    /**
+     * @param callable(string, int): string|null $transport Testovací přenos; produkčně se používá HTTPS.
+     */
+    public function __construct(string $cacheDirectory, ?callable $transport = null, ?DateTimeImmutable $now = null)
+    {
+        $this->cacheDirectory = self::prepareDirectory($cacheDirectory) ? $cacheDirectory : null;
+        $this->transport = $transport === null
+            ? Closure::fromCallable([$this, 'request'])
+            : Closure::fromCallable($transport);
+        $this->now = ($now ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
+     * Načte povolený zdroj, použije časově omezenou cache a při chybě vrátí
+     * poslední úspěšnou kopii s výslovným označením zastaralosti.
+     *
+     * @return array{body: string, fetchedAt: string, ageSeconds: int, cacheStatus: string, sourceLastModified: string|null, upstreamError: string|null}
+     */
+    public function fetch(string $resource): array
+    {
+        if (!isset(self::RESOURCES[$resource])) {
+            throw new RuntimeException('Požadovaný zdroj ČHMÚ není povolen.');
+        }
+
+        $definition = self::RESOURCES[$resource];
+        $cached = $this->readCache($resource);
+        if ($cached !== null) {
+            $age = $this->ageSeconds($cached['fetchedAt']);
+            if ($age < $definition['ttl']) {
+                return $this->result($cached, $age, 'fresh', null);
+            }
+        }
+
+        try {
+            $body = ($this->transport)(self::BASE_URL . $definition['path'], $definition['maxBytes']);
+            if (!is_string($body) || $body === '' || strlen($body) > $definition['maxBytes']) {
+                throw new RuntimeException('Odpověď ČHMÚ je prázdná nebo překračuje povolenou velikost.');
+            }
+            $entry = [
+                'body' => $body,
+                'fetchedAt' => $this->now->format('Y-m-d\TH:i:s\Z'),
+                'sourceLastModified' => null,
+            ];
+            $this->writeCache($resource, $entry);
+            return $this->result($entry, 0, 'fresh', null);
+        } catch (Throwable $exception) {
+            error_log('OuBrix Weather ČHMÚ gateway: ' . get_class($exception) . ' ' . $exception->getMessage());
+            if ($cached !== null) {
+                return $this->result(
+                    $cached,
+                    $this->ageSeconds($cached['fetchedAt']),
+                    'stale',
+                    'ČHMÚ nyní neodpovídá; zobrazuje se poslední uložená verze.'
+                );
+            }
+            throw new RuntimeException('Datový zdroj ČHMÚ není dostupný a není k dispozici uložená kopie.', 0, $exception);
+        }
+    }
+
+    /** Odstraní poškozenou nebo nevalidní odpověď z cache. */
+    public function invalidate(string $resource): void
+    {
+        if (!isset(self::RESOURCES[$resource]) || $this->cacheDirectory === null) {
+            return;
+        }
+        $file = $this->cacheFile($resource);
+        if (is_file($file) && !@unlink($file)) {
+            error_log('OuBrix Weather ČHMÚ gateway: nepodařilo se odstranit neplatnou cache.');
+        }
+    }
+
+    /**
+     * @return array{body: string, fetchedAt: string, sourceLastModified: string|null}|null
+     */
+    private function readCache(string $resource): ?array
+    {
+        if ($this->cacheDirectory === null) {
+            return null;
+        }
+        $contents = @file_get_contents($this->cacheFile($resource));
+        if (!is_string($contents) || $contents === '') {
+            return null;
+        }
+        $data = json_decode($contents, true);
+        if (!is_array($data) || !isset($data['body'], $data['fetchedAt']) || !is_string($data['body']) || !is_string($data['fetchedAt'])) {
+            $this->invalidate($resource);
+            return null;
+        }
+        $body = base64_decode($data['body'], true);
+        if (!is_string($body) || $body === '' || strlen($body) > self::RESOURCES[$resource]['maxBytes']) {
+            $this->invalidate($resource);
+            return null;
+        }
+        try {
+            new DateTimeImmutable($data['fetchedAt']);
+        } catch (Throwable $exception) {
+            $this->invalidate($resource);
+            return null;
+        }
+        return [
+            'body' => $body,
+            'fetchedAt' => $data['fetchedAt'],
+            'sourceLastModified' => isset($data['sourceLastModified']) && is_string($data['sourceLastModified'])
+                ? $data['sourceLastModified']
+                : null,
+        ];
+    }
+
+    /**
+     * @param array{body: string, fetchedAt: string, sourceLastModified: string|null} $entry
+     */
+    private function writeCache(string $resource, array $entry): void
+    {
+        if ($this->cacheDirectory === null) {
+            return;
+        }
+        $temporary = null;
+        try {
+            $data = json_encode([
+                'body' => base64_encode($entry['body']),
+                'fetchedAt' => $entry['fetchedAt'],
+                'sourceLastModified' => $entry['sourceLastModified'],
+            ]);
+            if (!is_string($data)) {
+                error_log('OuBrix Weather ČHMÚ gateway: nepodařilo se serializovat cache.');
+                return;
+            }
+            $temporary = $this->cacheFile($resource) . '.' . bin2hex(random_bytes(6)) . '.tmp';
+            if (@file_put_contents($temporary, $data, LOCK_EX) !== false
+                && @rename($temporary, $this->cacheFile($resource))) {
+                return;
+            }
+        } catch (Throwable $exception) {
+            error_log('OuBrix Weather ČHMÚ gateway: zápis cache selhal; data byla předána bez uložení.');
+        }
+        if ($temporary !== null && is_file($temporary)) {
+            @unlink($temporary);
+        }
+        if ($temporary !== null) {
+            error_log('OuBrix Weather ČHMÚ gateway: cache nelze zapsat; data byla předána bez uložení.');
+        }
+    }
+
+    /**
+     * Pevný HTTPS host a cesta z RESOURCES brání použití klienta jako proxy.
+     */
+    private function request(string $url, int $maxBytes): string
+    {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 8,
+                'ignore_errors' => true,
+                'follow_location' => 0,
+                'max_redirects' => 0,
+                'header' => "Accept: application/json, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+        $handle = @fopen($url, 'rb', false, $context);
+        if ($handle === false) {
+            throw new RuntimeException('HTTPS spojení s ČHMÚ se nepodařilo navázat.');
+        }
+
+        try {
+            $headers = isset($http_response_header) ? $http_response_header : [];
+            $status = 0;
+            foreach ($headers as $header) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $matches) === 1) {
+                    $status = (int) $matches[1];
+                }
+            }
+            if ($status !== 200) {
+                throw new RuntimeException('ČHMÚ vrátilo neočekávaný HTTP stav.');
+            }
+            $body = stream_get_contents($handle, $maxBytes + 1);
+            if (!is_string($body) || strlen($body) > $maxBytes) {
+                throw new RuntimeException('Odpověď ČHMÚ překračuje povolenou velikost.');
+            }
+            return $body;
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * @param array{body: string, fetchedAt: string, sourceLastModified: string|null} $entry
+     * @return array{body: string, fetchedAt: string, ageSeconds: int, cacheStatus: string, sourceLastModified: string|null, upstreamError: string|null}
+     */
+    private function result(array $entry, int $age, string $status, ?string $error): array
+    {
+        return [
+            'body' => $entry['body'],
+            'fetchedAt' => $entry['fetchedAt'],
+            'ageSeconds' => max(0, $age),
+            'cacheStatus' => $status,
+            'sourceLastModified' => $entry['sourceLastModified'],
+            'upstreamError' => $error,
+        ];
+    }
+
+    private function ageSeconds(string $fetchedAt): int
+    {
+        return max(0, $this->now->getTimestamp() - (new DateTimeImmutable($fetchedAt))->getTimestamp());
+    }
+
+    private function cacheFile(string $resource): string
+    {
+        return $this->cacheDirectory . DIRECTORY_SEPARATOR . $resource . '.json';
+    }
+
+    private static function prepareDirectory(string $directory): bool
+    {
+        if (!is_dir($directory) && !@mkdir($directory, 0750, true) && !is_dir($directory)) {
+            error_log('OuBrix Weather ČHMÚ gateway: složku cache nelze vytvořit.');
+            return false;
+        }
+        if (!is_writable($directory)) {
+            error_log('OuBrix Weather ČHMÚ gateway: složka cache není zapisovatelná.');
+            return false;
+        }
+        return true;
+    }
+}

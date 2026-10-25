@@ -31,6 +31,8 @@ $files = [
     'Unit/StatsServiceTest.php',
     'Unit/AggregateCacheTest.php',
     'Unit/WeatherAggregateRepositoryTest.php',
+    'Unit/AnalyticsServiceTest.php',
+    'Unit/AirQualityServiceTest.php',
     'Integration/CurrentConditionsTest.php',
     'Integration/HttpTest.php',
 ];

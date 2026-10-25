@@ -4,7 +4,7 @@
  *
  * @var string $appName
  * @var string $baseUrl
- * @var string $activePage klíč aktivní stránky (dashboard | history | stats)
+ * @var string $activePage klíč aktivní stránky
  */
 use OuBrix\Weather\Http\View;
 
@@ -13,6 +13,8 @@ $menu = [
     'dashboard' => ['index.php', 'Aktuálně'],
     'history' => ['history.php', 'Historie'],
     'stats' => ['stats.php', 'Statistiky'],
+    'analytics' => ['analytics.php', 'Analytika'],
+    'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
 ];
 ?>
 <a class="visually-hidden-focusable" href="#obsah">Přeskočit na obsah</a>
