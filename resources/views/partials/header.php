@@ -18,6 +18,7 @@ $groups = [
         'analytics' => ['analytics.php', 'Analytika srážek'],
     ],
     'ČHMÚ' => [
+        'warnings' => ['warnings.php', 'Výstrahy – Most'],
         'forecast' => ['forecast.php', 'Předpověď ČHMÚ'],
         'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
         'comparison' => ['comparison.php', 'Kopisty – porovnání'],

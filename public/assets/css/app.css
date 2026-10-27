@@ -110,6 +110,12 @@ main {
     overflow-wrap: anywhere;
 }
 
+.warning-severity { border-left: 4px solid var(--bs-secondary); }
+.warning-severity-extreme { border-left-color: var(--bs-danger); }
+.warning-severity-severe { border-left-color: #fd7e14; }
+.warning-severity-moderate { border-left-color: #ffc107; }
+.warning-severity-minor { border-left-color: #198754; }
+
 @media (max-width: 575.98px) {
     .weather-navigation {
         position: relative;

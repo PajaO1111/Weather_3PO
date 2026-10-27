@@ -18,6 +18,12 @@ final class ChmiGateway
 
     /** @var array<string, array{path: string, ttl: int, maxBytes: int, url?: string}> */
     private const RESOURCES = [
+        'warnings_current' => [
+            'path' => '/data2/XOCZ50_OKPR.xml',
+            'url' => 'https://vystrahy-cr.chmi.cz/data2/XOCZ50_OKPR.xml',
+            'ttl' => 300,
+            'maxBytes' => 4000000,
+        ],
         'forecast_today' => [
             'path' => '/api/data/txtf/meteo.today',
             'url' => 'https://data-provider.chmi.cz/api/data/txtf/meteo.today',
@@ -226,7 +232,7 @@ final class ChmiGateway
                 'ignore_errors' => true,
                 'follow_location' => 0,
                 'max_redirects' => 0,
-                'header' => "Accept: application/json, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
+                'header' => "Accept: application/json, application/xml, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
             ],
             'ssl' => [
                 'verify_peer' => true,

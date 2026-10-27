@@ -16,6 +16,8 @@ return static function (): int {
     ClimateFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/ForecastFixtures.php';
     ForecastFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/WarningFixtures.php';
+    WarningFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
@@ -163,7 +165,28 @@ return static function (): int {
             && $request('/api/forecast.php?station=Most')[0] === 400, 'forecast rejects method and arbitrary parameters');
         check($request('/assets/js/forecast.js')[0] === 200 && $request('/assets/js/navigation.js')[0] === 200,
             'forecast and navigation modules served');
-        return 59;
+        [$status, $type, $body] = $request('/warnings.php');
+        check($status === 200 && strpos($type, 'text/html') === 0
+            && strpos($body, 'data-api="/api/warnings.php"') !== false, 'warning page wired');
+        check(strpos($body, 'js/warnings.js') !== false && strpos($body, 'CISORP 4209') !== false
+            && strpos($body, 'aria-current="page"') !== false, 'warnings module, geography and active menu');
+        [$status, $type, $body] = $request('/api/warnings.php');
+        $alerts = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $alerts['area']['code'] === '4209' && $alerts['summary']['active'] === 1, 'real warning API uses isolated fixture');
+        check($alerts['items'][0]['info']['severity'] === 'Moderate'
+            && $alerts['meta']['source']['cacheStatus'] === 'fresh', 'warning API retains severity and provenance');
+        check($request('/api/warnings.php', 'POST')[0] === 405
+            && $request('/api/warnings.php?url=other')[0] === 400, 'warnings reject arbitrary query and method');
+        check($request('/api/warnings.php', 'HEAD')[0] === 200, 'warnings HEAD works');
+        check($request('/assets/js/warnings.js')[0] === 200, 'warnings module served');
+        file_put_contents($cache . DIRECTORY_SEPARATOR . 'warnings_current.json', json_encode([
+            'body' => base64_encode('<broken>'), 'fetchedAt' => gmdate('Y-m-d\TH:i:s\Z'), 'sourceLastModified' => null,
+        ], JSON_THROW_ON_ERROR));
+        [$status, , $body] = $request('/api/warnings.php');
+        check($status === 503 && json_decode($body, true)['error']['code'] === 'WARNINGS_UNAVAILABLE'
+            && strpos($body, 'Neznamená to stav bez výstrah') !== false, 'invalid CAP is explicit 503 not empty success');
+        return 67;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

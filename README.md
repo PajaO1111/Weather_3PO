@@ -10,11 +10,14 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
 > a cache s viditelným stavem zastaralosti. Připravena je také fáze 5 – historické
 > Klima Kopisty s vypočtenými referenčními průměry 1991–2020.
+> Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
+> výstrahy ČHMÚ pro ORP Most.
 > Další plán viz [Plán rozšíření](#plán-rozšíření).
 
 ## Požadavky
 
 - PHP **7.4 nebo novější** (doporučeno 8.2+) s rozšířením `pdo_mysql`
+- Pro výstrahy CAP také rozšíření `dom` a `libxml`; odchozí HTTPS s ověřením certifikátu
 - MariaDB/MySQL s původní tabulkou `pws_observations`
 - Původní `config.php` s konstantami `DB_HOST`, `DB_PORT`, `DB_NAME`,
   `DB_USER`, `DB_PASS`, `WU_STATION_ID`
@@ -151,6 +154,72 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
   a vše funguje dál, jen bez zrychlení.
 
 ## Nasazení na hosting
+
+### Fáze 7 – Výstrahy ČHMÚ pro ORP Most
+
+Stránka [public/warnings.php](public/warnings.php) je v menu **ČHMÚ → Výstrahy – Most**.
+API [public/api/warnings.php](public/api/warnings.php) podporuje GET/HEAD, nepřijímá
+parametry (400), odmítá ostatní metody (405) a při nevalidním/nedostupném zdroji
+bez použitelné odpovědi vrací 503. Nezávisí na DB ani tajných přístupových údajích.
+
+**Ověřený zdroj (27. 10. 2026):** [konfigurace oficiálního prohlížeče](https://vystrahy-cr.chmi.cz/config/download-cap.json)
+odkazuje pevný [aktuální CAP XML](https://vystrahy-cr.chmi.cz/data2/XOCZ50_OKPR.xml),
+který vrátil HTTP 200. Jde o aktuální souhrnnou obálku, nikoli historii.
+Archivní `alert_cap_50_DDHHMM.xml` soubory se do aktuálního stavu nemíchají.
+[Metadata oficiálního prohlížeče](https://vystrahy-cr.chmi.cz/config/global.json)
+potvrzují `cz.chmi.orp:4209 = Most`. Filtr používá přesnou hodnotu `CISORP = 4209`,
+nikoli jméno kraje či hledání podřetězce.
+
+- Pevný HTTPS zdroj, ověřené TLS, bez přesměrování, timeout 8 sekund, limit 4 MB,
+  cache 5 minut při načtení. Nejde o push notifikace ani průběžný monitoring.
+- CAP 1.2 XML odmítá DTD/entity, jiný namespace/kořen, neplatná data a číselníky.
+  Zachovává identifikátor, odesílatele, reference, status, typ zprávy, info/oblasti,
+  kódy jevů i parametry. České bloky mají přednost před odpovídajícími překlady;
+  cizojazyčný blok bez českého protějšku zůstává viditelný s upozorněním.
+- `Update` nahrazuje odkazovanou obálku, `Cancel` ji ruší ještě před územním
+  filtrem. Aktuální snapshot nepřebírá odstraněné jevy z předchozí cache.
+  Reference identifikují kombinaci `sender,identifier,sent`. Testovací nebo
+  neveřejná zpráva nesmí odvolat skutečnou veřejnou výstrahu.
+- Zobrazuje se jev, textová závažnost a barva, pravděpodobnost, naléhavost,
+  vydání/stáří, výskyt jevu, platnost zprávy, oblast včetně výškových omezení,
+  text a pokyny ČHMÚ. Časy s posunem se normalizují do UTC a zobrazují v Europe/Prague.
+  `eventEndingTime` je konec **výskytu jevu**, nikoli konec platnosti zprávy `expires`.
+  Oba časy jsou oddělené; chybějící konec nevymýšlíme (možná platnost do odvolání).
+- Kombinace `Minor + Unlikely` znamená dle [dokumentace CAP ČHMÚ](https://opendata.chmi.cz/meteorology/weather/alerts/metadata/Dokumentace_CAP.pdf)
+  minimální/žádné nebezpečí a žádnou/zrušenou výstrahu; není prezentována jako aktivní
+  varování. Tyto bloky, ukončené a testovací zprávy jsou v rozbalovacím detailu.
+  Neúplný čas/území, neznámé hodnoty, prázdný výběr nebo samotný Cancel nejsou „bez výstrah“.
+- Vydání starší než 24 hodin je z opatrnosti označeno jako zastaralé, i když bylo
+  právě staženo; jde o pravidlo aplikace, ne lhůtu ČHMÚ. Stará cache při výpadku
+  nesmí potvrdit aktuální stav ani hlášení bez výstrah.
+- Dokumentace i historická aktivní obálka potvrzují jevy SIVS/HPPS; aktuální
+  soubor obsahuje i smogové skupiny O3, PM10, NO2 a SO2. Události `Env` a parametry
+  SVRS zobrazujeme jako výstrahy, **ne koncentrace ani index INDX**. Nejde
+  o kompletní stav jednotlivých vodoměrných profilů ani samostatný týdenní HAMR
+  produkt `alert_cap_70_*`; tyto další zdroje nejsou integrovány.
+
+API obsahuje `area`, `summary` (`warnings`, `no_warning_reported`, `unverified`),
+`items` se zdrojovou obálkou a info blokem, odvolání/technické zprávy `notices`
+a `meta` s časem vydání, načtení, cache a upozorněními. `no_warning_reported`
+znamená jen výslovná hlášení zdroje, nikoli garanci nepřítomnosti nebezpečí.
+Veškerý zdrojový text se vykresluje jako text, nikoli HTML; odkazy na oficiální
+výstrahy a CAP jsou pevné.
+
+**Nahrát pouze do `/www/domains/oubrix.eu/Weather/`:** nové i změněné soubory
+v `app/`, `public/` (včetně CSS a `assets/js/warnings.js`) a `resources/`.
+Zachovat existující neveřejnou cache; nepřepisovat hlavní web o úroveň výše.
+DB, CRON, `.env`, tajný `config.php`, veřejný `config/app.php` ani `.htaccess`
+se v této fázi nemění. Testy a fixture cache nepatří na hosting.
+
+Po nahrání ověřit `public/warnings.php` a `public/api/warnings.php` (200),
+odkaz v mobilním menu, vydání/stáří a detail hlášení. Při výpadku musí být jasné,
+že aktuální stav nelze ověřit. Přehled nenahrazuje oficiální výstražnou službu.
+
+```powershell
+php tests\run.php
+node tests\Frontend\WarningsTest.mjs
+node tests\Frontend\NavigationTest.mjs
+```
 
 ### Fáze 6 – Textová předpověď a kompaktní menu
 
