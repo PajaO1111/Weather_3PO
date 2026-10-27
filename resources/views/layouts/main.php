@@ -24,6 +24,12 @@ use OuBrix\Weather\Http\View;
     <link rel="stylesheet" href="<?= View::e($cdn['bootstrap_css']['url']) ?>"
           integrity="<?= View::e($cdn['bootstrap_css']['sri']) ?>" crossorigin="anonymous">
     <link rel="stylesheet" href="<?= View::e(View::asset('css/app.css')) ?>">
+<?php if (isset($activePage) && $activePage === 'radar'): ?>
+    <link rel="stylesheet" href="<?= View::e($cdn['leaflet_css']['url']) ?>"
+          integrity="<?= View::e($cdn['leaflet_css']['sri']) ?>" crossorigin="anonymous">
+    <script defer src="<?= View::e($cdn['leaflet_js']['url']) ?>"
+            integrity="<?= View::e($cdn['leaflet_js']['sri']) ?>" crossorigin="anonymous"></script>
+<?php endif; ?>
     <!-- Motiv se nastaví ještě před vykreslením, aby stránka „neblikla“. -->
     <script src="<?= View::e(View::asset('js/theme.js')) ?>"></script>
 </head>

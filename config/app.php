@@ -67,6 +67,14 @@ return [
 
     // Pevné verze knihoven z CDN včetně SRI otisků (CSP domény povoluje cdn.jsdelivr.net).
     'cdn' => [
+        'leaflet_css' => [
+            'url' => 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css',
+            'sri' => 'sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H',
+        ],
+        'leaflet_js' => [
+            'url' => 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+            'sri' => 'sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH',
+        ],
         'bootstrap_css' => [
             'url' => 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
             'sri' => 'sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH',

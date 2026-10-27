@@ -11,6 +11,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
 use Throwable;
+use OuBrix\Weather\Weather\Support\RadarProduct;
 
 final class ChmiGateway
 {
@@ -96,7 +97,7 @@ final class ChmiGateway
      */
     public function fetch(string $resource): array
     {
-        $resources = $this->resources();
+        $resources = $this->resources($resource);
         if (!isset($resources[$resource])) {
             throw new RuntimeException('Požadovaný zdroj ČHMÚ není povolen.');
         }
@@ -139,7 +140,7 @@ final class ChmiGateway
     /** Odstraní poškozenou nebo nevalidní odpověď z cache. */
     public function invalidate(string $resource): void
     {
-        if (!isset($this->resources()[$resource]) || $this->cacheDirectory === null) {
+        if (!isset($this->resources($resource)[$resource]) || $this->cacheDirectory === null) {
             return;
         }
         $file = $this->cacheFile($resource);
@@ -166,7 +167,7 @@ final class ChmiGateway
             return null;
         }
         $body = base64_decode($data['body'], true);
-        if (!is_string($body) || $body === '' || strlen($body) > $this->resources()[$resource]['maxBytes']) {
+        if (!is_string($body) || $body === '' || strlen($body) > $this->resources($resource)[$resource]['maxBytes']) {
             $this->invalidate($resource);
             return null;
         }
@@ -207,8 +208,10 @@ final class ChmiGateway
             $temporary = $this->cacheFile($resource) . '.' . bin2hex(random_bytes(6)) . '.tmp';
             if (@file_put_contents($temporary, $data, LOCK_EX) !== false
                 && @rename($temporary, $this->cacheFile($resource))) {
+                $this->pruneRadarFrames($resource);
                 return;
             }
+
         } catch (Throwable $exception) {
             error_log('OuBrix Weather ČHMÚ gateway: zápis cache selhal; data byla předána bez uložení.');
         }
@@ -220,8 +223,21 @@ final class ChmiGateway
         }
     }
 
+    private function pruneRadarFrames(string $resource): void
+    {
+        if ($this->cacheDirectory === null || !preg_match('/^radar_frame_(maxz|merge)_\d{12}$/D', $resource, $match)) return;
+        $files = glob($this->cacheDirectory . DIRECTORY_SEPARATOR . 'radar_frame_' . $match[1] . '_*.json') ?: [];
+        rsort($files, SORT_STRING);
+        foreach (array_slice($files, 3) as $file) {
+            if (preg_match('/^radar_frame_' . $match[1] . '_\d{12}\.json$/D', basename($file))
+                && !@unlink($file)) {
+                error_log('OuBrix Weather ČHMÚ gateway: starou radarovou cache nelze odstranit.');
+            }
+        }
+    }
+
     /**
-     * Pevné HTTPS adresy z RESOURCES brání použití klienta jako proxy.
+     * Pevné HTTPS adresy a odvozené radarové názvy brání použití klienta jako proxy.
      */
     private function request(string $url, int $maxBytes): string
     {
@@ -232,7 +248,7 @@ final class ChmiGateway
                 'ignore_errors' => true,
                 'follow_location' => 0,
                 'max_redirects' => 0,
-                'header' => "Accept: application/json, application/xml, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
+                'header' => "Accept: application/json, application/xml, image/png, text/html, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
             ],
             'ssl' => [
                 'verify_peer' => true,
@@ -292,9 +308,28 @@ final class ChmiGateway
     }
 
     /** @return array<string, array{path: string, ttl: int, maxBytes: int, url?: string}> */
-    private function resources(): array
+    private function resources(?string $requested = null): array
     {
         $resources = self::RESOURCES;
+        foreach (['maxz', 'merge'] as $product) {
+            $definition = RadarProduct::definition($product);
+            $resources['radar_index_' . $product] = [
+                'path' => RadarProduct::ROOT . $definition['path'], 'ttl' => $definition['step'], 'maxBytes' => 2000000,
+            ];
+            $resources['radar_legend_' . $product] = [
+                'path' => RadarProduct::ROOT . $definition['legend'], 'ttl' => 2592000, 'maxBytes' => 100000,
+            ];
+        }
+        if ($requested !== null && preg_match('/^radar_frame_(maxz|merge)_(\d{12})$/D', $requested, $match)) {
+            $product = $match[1];
+            $time = RadarProduct::time($match[2], $product);
+            $age = $this->now->getTimestamp() - $time->getTimestamp();
+            if ($age >= -300 && $age <= 8 * 86400) {
+                $definition = RadarProduct::definition($product);
+                $resources[$requested] = ['path' => RadarProduct::ROOT . $definition['path']
+                    . RadarProduct::filename($product, $match[2]), 'ttl' => $definition['step'], 'maxBytes' => 1000000];
+            }
+        }
         $date = $this->now->format('Ymd');
         foreach ([1, 2, 4] as $number) {
             $resources['climate_meta' . $number . '_' . $date] = [

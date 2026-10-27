@@ -12,6 +12,7 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Klima Kopisty s vypočtenými referenčními průměry 1991–2020.
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
+> Fáze 8 přidává mapu radaru MAX_Z_MASK a hodinového odhadu MERGE.
 > Další plán viz [Plán rozšíření](#plán-rozšíření).
 
 ## Požadavky
@@ -154,6 +155,84 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
   a vše funguje dál, jen bez zrychlení.
 
 ## Nasazení na hosting
+
+### Fáze 8 – Radar ČHMÚ
+
+Nová stránka [public/radar.php](public/radar.php) je v menu **ČHMÚ → Radar ČHMÚ**.
+Používá Leaflet 1.9.4 (pevná CDN verze se SRI) a mapový podklad OpenStreetMap
+s povinným uvedením autorství. Podklad obsahuje hranice, města a silnice;
+průhledné datové PNG se překrývá nad ním. Podklad jde přímo z
+`https://tile.openstreetmap.org` (předává se IP adresa návštěvníka), bez stahování
+do zásoby či serverového proxy. Radarová data a legendy načítá pouze PHP gateway
+z pevně povolených cest ČHMÚ. Pouze stránka radaru načítá Leaflet.
+
+API [public/api/radar.php](public/api/radar.php) vrací nejnovější snímek:
+`?product=maxz` (výchozí) nebo `?product=merge`. Podporuje GET/HEAD, nepovolený
+produkt/tvar/další parametr odmítne 400, jiné metody 405, nevalidní/nedostupný
+zdroj bez použitelné odpovědi 503. Není to veřejná proxy: klient nemůže zadat
+URL ani název souboru. API nezávisí na DB.
+
+| Produkt | Pevný adresář | Význam času UTC v názvu | Obnova cache |
+|---|---|---|---|
+| MAX_Z_MASK | `composite/maxz/png_masked/` | konec 5minutového intervalu | 5 minut |
+| MERGE | `composite/merge1h/png/` | konec předchozího hodinového intervalu | 10 minut |
+
+Adresáře jsou pod `https://opendata.chmi.cz/meteorology/weather/radar/`.
+Z indexu se vybírá nejnovější validní UTC název s přesným prefixem/suffixem,
+nikoli čas modifikace souboru nebo pořadí HTML. Přenos má ověřené TLS, zakázaná
+přesměrování, timeout 8 sekund na zdroj, limity 2 MB index / 1 MB snímek /
+100 kB legenda. Legendy `scl-dbz-mmh.png` a `scl-mm.png` mají cache 30 dní.
+Udržují se nejvýše tři snímkové cache každého produktu, bez zásahu do ostatní
+cache (například posledních platných koncentrací). Revize téhož snímku se
+znovu načte po intervalu produktu.
+
+**Georeference ověřena podle dokumentace ČHMÚ, kapitoly 23 a 25:**
+EPSG:3857, PNG 680 × 460 px. Rozsah **celého obrázku** je
+`[[48.047, 11.267], [52.167, 20.770]]` v pořadí `[zeměpisná šířka, délka]`.
+Datová oblast je menší: `[[48.047, 11.267], [51.458, 19.624]]`.
+Pro `imageOverlay` je nutný celý rozsah PNG, jinak se radar posune/roztáhne.
+Výchozí projekce Leaflet EPSG:3857 odpovídá projekci rastru; nepřevádíme PNG
+na rovnoměrnou síť stupňů. Polohy OuBrix `50.51039, 13.64525` a Kopisty
+`50.54417, 13.62278` jsou orientační; Kopisty dle současného záznamu metadat ČHMÚ.
+
+- Přepínání produktů, posuvník krytí 0–100 %, přiblížení/posun, návrat na Most
+  nebo celou datovou oblast, značky obou stanic. Nová vrstva se ověří načtením
+  obrázku, stará se při obnově odstraní; nemícháme čas, produkt a jiné PNG.
+- API vrací `product`, `crs`, `bounds`, `dataBounds`, `frame` s intervalem a stářím,
+  `stations`, `meta.sources`/`warnings` a ověřené PNG `image`/`legend` jako datové URI.
+  Obrázek a čas jsou tak ze stejné odpovědi; nevzniká závod dvou požadavků „latest“.
+  PNG se kontroluje podle signatury, rozměrů, úplnosti chunků a CRC.
+- MAX_Z_MASK je odrazivost v dBZ, **ne naměřený srážkový úhrn**. Světlejší barvy
+  doplňují masku dopadu srážek na povrch podle PseudoCAPPI 2 km (práh 7 dBZ).
+  Převod dBZ na mm/h v oficiální legendě je pouze radarový odhad.
+- MERGE je kombinovaný plošný odhad mm za uvedenou hodinu, nikoli okamžitá
+  intenzita. Každých deset minut se hodinové okno posouvá; **překrývající se
+  úhrny se nesčítají**.
+- Zdrojový čas je konec intervalu v UTC, UI zobrazuje začátek i konec v Europe/Prague.
+  Snímky starší než 20 minut MAX_Z_MASK / 60 minut MERGE se označují jako zastaralé.
+  Jsou to pravidla aplikace s tolerancí latence, nikoli záruka poskytovatele.
+  Stará cache při výpadku je viditelně označena, chyba nikdy neznamená „bez srážek“.
+  Průhledné/šedé/chybějící pixely nejsou garancí nulových srážek.
+- První verze nemá animaci, HDF5, klikání na číselné hodnoty ani vlastní
+  vektorové hranice nad radarem. Hranice jsou v podkladu; viditelnost lze
+  zlepšit snížením krytí. Žádné automatické dlouhé smyčky ani plošné stahování.
+
+**Nasazení pouze do `/www/domains/oubrix.eu/Weather/`:** nahrát nové i změněné
+soubory v `app/`, `public/` (CSS a `assets/js/radar.js`), `resources/` a veřejný
+`config/app.php` (nové CDN definice Leaflet). Neměnit tajný `config.php`, `.env`,
+DB, CRON ani `.htaccess`; zachovat existující neveřejnou cache.
+Pokud nadřazený web používá vlastní CSP, musí `img-src` povolovat
+`https://tile.openstreetmap.org` a `data:` a knihovny z `https://cdn.jsdelivr.net`.
+Při blokování podkladu nebo knihovny se zobrazí chyba; CSP automaticky neměníme.
+
+Po nahrání ověřit `public/radar.php` a obě varianty `public/api/radar.php`
+(200), mapový podklad, obě legendy, časové intervaly, přepnutí produktu a mobil.
+
+```powershell
+php tests\run.php
+node tests\Frontend\RadarTest.mjs
+node tests\Frontend\NavigationTest.mjs
+```
 
 ### Fáze 7 – Výstrahy ČHMÚ pro ORP Most
 

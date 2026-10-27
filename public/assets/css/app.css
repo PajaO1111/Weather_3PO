@@ -116,6 +116,10 @@ main {
 .warning-severity-moderate { border-left-color: #ffc107; }
 .warning-severity-minor { border-left-color: #198754; }
 
+.radar-map { height: min(65vh, 640px); min-height: 340px; z-index: 0; background: #e6e8eb; }
+.radar-map .leaflet-tooltip { color: #202040; background: #fff; }
+#radar-legend { max-width: 100%; }
+
 @media (max-width: 575.98px) {
     .weather-navigation {
         position: relative;

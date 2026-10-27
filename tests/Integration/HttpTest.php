@@ -18,6 +18,8 @@ return static function (): int {
     ForecastFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/WarningFixtures.php';
     WarningFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/RadarFixtures.php';
+    RadarFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
@@ -186,7 +188,32 @@ return static function (): int {
         [$status, , $body] = $request('/api/warnings.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'WARNINGS_UNAVAILABLE'
             && strpos($body, 'Neznamená to stav bez výstrah') !== false, 'invalid CAP is explicit 503 not empty success');
-        return 67;
+        [$status, $type, $body] = $request('/radar.php');
+        check($status === 200 && strpos($type, 'text/html') === 0
+            && strpos($body, 'data-api="/api/radar.php"') !== false && strpos($body, 'js/radar.js') !== false, 'radar page and module wired');
+        check(strpos($body, 'leaflet@1.9.4') !== false && strpos($body, 'aria-current="page"') !== false, 'radar pinned map library and active link');
+        [$status, $type, $body] = $request('/api/radar.php');
+        $radar = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $radar['product']['id'] === 'maxz' && $radar['crs'] === 'EPSG:3857', 'radar API default product');
+        check($radar['bounds'][1] === [52.167, 20.77] && strpos($radar['image'], 'data:image/png;base64,') === 0,
+            'radar JSON includes validated PNG paired with full bounds');
+        [$status, , $body] = $request('/api/radar.php?product=merge');
+        $radar = json_decode($body, true);
+        check($status === 200 && $radar['product']['unit'] === 'mm / 1 h'
+            && strtotime($radar['frame']['end']) - strtotime($radar['frame']['start']) === 3600, 'MERGE hourly API');
+        check($request('/api/radar.php?product[]=maxz')[0] === 400
+            && $request('/api/radar.php?product=other')[0] === 400
+            && $request('/api/radar.php?url=https://other')[0] === 400, 'radar rejects malformed and arbitrary parameters');
+        check($request('/api/radar.php', 'POST')[0] === 405
+            && $request('/api/radar.php', 'HEAD')[0] === 200, 'radar method contract');
+        check($request('/assets/js/radar.js')[0] === 200, 'radar module served');
+        file_put_contents($cache . DIRECTORY_SEPARATOR . 'radar_index_maxz.json', json_encode([
+            'body' => base64_encode('<html>bad index</html>'), 'fetchedAt' => gmdate('Y-m-d\TH:i:s\Z'), 'sourceLastModified' => null,
+        ], JSON_THROW_ON_ERROR));
+        [$status, , $body] = $request('/api/radar.php');
+        check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
+        return 76;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {
