@@ -152,6 +152,52 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
 
 ## Nasazení na hosting
 
+### Fáze 6 – Textová předpověď a kompaktní menu
+
+Nová stránka [public/forecast.php](public/forecast.php) je v rozbalovacím menu
+ve skupině **ČHMÚ → Předpověď ČHMÚ**. API [public/api/forecast.php](public/api/forecast.php)
+načítá pouze pevně povolený zdroj
+`https://data-provider.chmi.cz/api/data/txtf/meteo.today`, serverově přes
+`ChmiGateway`, s timeoutem 8 sekund, kontrolou TLS, bez přesměrování,
+limitem 1 MB a cache 30 minut. Nezávisí na DB ani tajných přístupových údajích.
+
+Parser vyžaduje seznam předpovědí s platným UTC časem vydání `sent`,
+začátkem `startTime` a neprázdnými textovými sekcemi `displayText`.
+Nadpisy `mainHeadline`/`headline` ani konec `endTime` nejsou povinné.
+Text se vykresluje bezpečně jako text, nikoli HTML. Uvádí se čas vydání,
+stáří, začátek a případně konec platnosti. Chybějící konec se neodhaduje
+z textu nebo názvu. Příliš budoucí vydání, neplatný interval nebo formát
+se odmítají; vydání starší než 24 hodin a ukončený interval jsou označeny.
+Limit 24 hodin je naše pravidlo stáří, nikoli oficiální doba platnosti.
+Při výpadku ČHMÚ může být použita jen výslovně označená stará cache.
+Obecná předpověď není označena jako lokální předpověď Mostu.
+
+API nepřijímá parametry oblasti/stanice: neplatný dotaz vrací 400, nepovolená
+metoda 405 a nedostupná/nevalidní data bez použitelné odpovědi 503.
+Tlačítko **Znovu načíst** opakuje načtení API, nikoli vynucení obnovy cache.
+
+Navigace používá nativní `<details>/<summary>` **Menu** i na desktopu,
+členěné na Vlastní stanici, Analytiku a ČHMÚ. Nevyžaduje Bootstrap JS ani
+nové knihovny. Rozbalení funguje bez JavaScriptu a z klávesnice; malý modul
+navíc zavírá menu po kliknutí mimo něj a klávesou Escape s návratem fokusu.
+Aktivní stránka má `aria-current="page"`. Na mobilu se panel vejde do šířky
+hlavičky, dlouhá nabídka má vlastní svislé posouvání a motiv zůstává dostupný.
+
+**Nasazení pouze do `/www/domains/oubrix.eu/Weather/`:** nahrát nové i změněné
+soubory v `app/`, `public/` (včetně CSS a obou nových JS modulů) a `resources/`.
+Nenahrávat je do adresářů hlavního webu o úroveň výše. Ve fázi 6 se nemění
+DB, CRON, tajný `config.php`, `.env` ani `.htaccess`. Existující neveřejnou
+cache zachovat. Po nahrání ověřit `public/forecast.php`, `public/api/forecast.php`,
+otevření menu na mobilu, odkazy a přepnutí motivu.
+
+```powershell
+php tests\run.php
+node tests\Frontend\ForecastTest.mjs
+node tests\Frontend\NavigationTest.mjs
+node tests\Frontend\ClimateTest.mjs
+node tests\Frontend\TemperaturePrecisionTest.mjs
+```
+
 ### Fáze 5 – Klima Kopisty
 
 Stránka [public/climate.php](public/climate.php) je dostupná z menu **Klima Kopisty**.

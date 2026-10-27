@@ -48,6 +48,7 @@ foreach (['js/api.js', 'js/charts.js', 'js/gauges.js', 'js/week.js'] as $module)
 }
 ?>
 <script type="importmap"><?= json_encode(['imports' => $modules], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+<script type="module" src="<?= View::e(View::asset('js/navigation.js')) ?>"></script>
 <script type="module" src="<?= View::e(View::asset(isset($pageScript) ? $pageScript : 'js/dashboard.js')) ?>"></script>
 </body>
 </html>

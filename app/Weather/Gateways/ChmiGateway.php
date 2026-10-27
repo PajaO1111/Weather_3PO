@@ -16,8 +16,14 @@ final class ChmiGateway
 {
     private const BASE_URL = 'https://opendata.chmi.cz';
 
-    /** @var array<string, array{path: string, ttl: int, maxBytes: int}> */
+    /** @var array<string, array{path: string, ttl: int, maxBytes: int, url?: string}> */
     private const RESOURCES = [
+        'forecast_today' => [
+            'path' => '/api/data/txtf/meteo.today',
+            'url' => 'https://data-provider.chmi.cz/api/data/txtf/meteo.today',
+            'ttl' => 1800,
+            'maxBytes' => 1000000,
+        ],
         'climate_history_station' => [
             'path' => '/meteorology/climate/historical/metadata/meta1.json',
             'ttl' => 604800,
@@ -99,7 +105,7 @@ final class ChmiGateway
         }
 
         try {
-            $body = ($this->transport)(self::BASE_URL . $definition['path'], $definition['maxBytes']);
+            $body = ($this->transport)($definition['url'] ?? self::BASE_URL . $definition['path'], $definition['maxBytes']);
             if (!is_string($body) || $body === '' || strlen($body) > $definition['maxBytes']) {
                 throw new RuntimeException('Odpověď ČHMÚ je prázdná nebo překračuje povolenou velikost.');
             }
@@ -209,7 +215,7 @@ final class ChmiGateway
     }
 
     /**
-     * Pevný HTTPS host a cesta z RESOURCES brání použití klienta jako proxy.
+     * Pevné HTTPS adresy z RESOURCES brání použití klienta jako proxy.
      */
     private function request(string $url, int $maxBytes): string
     {
@@ -279,7 +285,7 @@ final class ChmiGateway
         return $this->cacheDirectory . DIRECTORY_SEPARATOR . $resource . '.json';
     }
 
-    /** @return array<string, array{path: string, ttl: int, maxBytes: int}> */
+    /** @return array<string, array{path: string, ttl: int, maxBytes: int, url?: string}> */
     private function resources(): array
     {
         $resources = self::RESOURCES;

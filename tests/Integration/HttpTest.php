@@ -14,6 +14,8 @@ return static function (): int {
     require_once dirname(__DIR__) . '/support/ClimateFixtures.php';
     $cache = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'weather-http-climate-' . bin2hex(random_bytes(6));
     ClimateFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/ForecastFixtures.php';
+    ForecastFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
@@ -125,8 +127,8 @@ return static function (): int {
         check($status === 200 && strpos($type, 'text/html') === 0
             && strpos($body, 'data-api="/api/climate.php"') !== false, 'climate page wired');
         check(strpos($body, 'js/climate.js') !== false && strpos($body, 'Klima Kopisty') !== false
-            && strpos($body, 'FLAG_REPEAT') !== false && strpos($body, 'navbar-nav me-auto flex-wrap') !== false,
-            'climate module, wrapping menu and methodology');
+            && strpos($body, 'FLAG_REPEAT') !== false && strpos($body, '<details class="weather-menu">') !== false,
+            'climate module, dropdown menu and methodology');
         [$status, $type, $body] = $request('/api/climate.php');
         $climate = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0
@@ -142,7 +144,26 @@ return static function (): int {
         check($request('/api/climate.php?year=1800')[0] === 400
             && $request('/api/climate.php?year=' . gmdate('Y'))[0] === 400, 'climate rejects unpublished and current year');
         check($request('/assets/js/climate.js')[0] === 200, 'climate module served');
-        return 52;
+        [$status, $type, $body] = $request('/forecast.php');
+        check($status === 200 && strpos($type, 'text/html') === 0
+            && strpos($body, 'data-api="/api/forecast.php"') !== false, 'forecast page wired');
+        check(strpos($body, 'js/forecast.js') !== false
+            && strpos($body, 'není lokální předpovědí pro Most') !== false, 'forecast module and geographical disclaimer');
+        check(strpos($body, 'aria-current="page"') !== false
+            && strpos($body, '<summary>Menu</summary>') !== false
+            && strpos($body, 'js/navigation.js') !== false, 'native accessible navigation, enhancement script and active page');
+        [$status, $type, $body] = $request('/api/forecast.php');
+        $forecast = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && count($forecast['items'][0]['sections']) === 3, 'actual forecast API with fixture');
+        check($forecast['items'][0]['status'] === 'published'
+            && $forecast['items'][0]['endTime'] === null && $forecast['meta']['source']['cacheStatus'] === 'fresh',
+            'forecast API preserves absent expiry and source provenance');
+        check($request('/api/forecast.php', 'POST')[0] === 405
+            && $request('/api/forecast.php?station=Most')[0] === 400, 'forecast rejects method and arbitrary parameters');
+        check($request('/assets/js/forecast.js')[0] === 200 && $request('/assets/js/navigation.js')[0] === 200,
+            'forecast and navigation modules served');
+        return 59;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

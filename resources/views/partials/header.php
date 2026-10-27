@@ -8,33 +8,45 @@
  */
 use OuBrix\Weather\Http\View;
 
-// Položky menu: klíč => [soubor v public/, popisek].
-$menu = [
-    'dashboard' => ['index.php', 'Aktuálně'],
-    'history' => ['history.php', 'Historie'],
-    'stats' => ['stats.php', 'Statistiky'],
-    'analytics' => ['analytics.php', 'Analytika'],
-    'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
-    'comparison' => ['comparison.php', 'Kopisty'],
-    'climate' => ['climate.php', 'Klima Kopisty'],
+$groups = [
+    'Vlastní stanice' => [
+        'dashboard' => ['index.php', 'Aktuálně'],
+        'history' => ['history.php', 'Historie'],
+    ],
+    'Analytika' => [
+        'stats' => ['stats.php', 'Statistiky a rekordy'],
+        'analytics' => ['analytics.php', 'Analytika srážek'],
+    ],
+    'ČHMÚ' => [
+        'forecast' => ['forecast.php', 'Předpověď ČHMÚ'],
+        'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
+        'comparison' => ['comparison.php', 'Kopisty – porovnání'],
+        'climate' => ['climate.php', 'Klima Kopisty'],
+    ],
 ];
 ?>
 <a class="visually-hidden-focusable" href="#obsah">Přeskočit na obsah</a>
 <header class="app-header border-bottom">
-    <nav class="navbar navbar-expand container-xl flex-wrap gap-2" aria-label="Hlavní navigace">
-        <a class="navbar-brand fw-semibold" href="<?= View::e($baseUrl) ?>/index.php">
+    <nav class="weather-navigation container-xl" aria-label="Hlavní navigace">
+        <a class="navbar-brand fw-semibold weather-brand" href="<?= View::e($baseUrl) ?>/index.php">
             <span aria-hidden="true">⛅</span> <?= View::e($appName) ?>
         </a>
-        <ul class="navbar-nav me-auto flex-wrap">
+        <details class="weather-menu">
+            <summary>Menu</summary>
+            <div class="weather-menu-panel">
+<?php foreach ($groups as $label => $menu): ?>
+                <section>
+                    <h2 class="h6 text-body-secondary"><?= View::e($label) ?></h2>
+                    <ul class="list-unstyled mb-0">
 <?php foreach ($menu as $key => $entry): ?>
-<?php if ($key === $activePage): ?>
-            <li class="nav-item"><a class="nav-link active" aria-current="page" href="<?= View::e($baseUrl) ?>/<?= View::e($entry[0]) ?>"><?= View::e($entry[1]) ?></a></li>
-<?php else: ?>
-            <li class="nav-item"><a class="nav-link" href="<?= View::e($baseUrl) ?>/<?= View::e($entry[0]) ?>"><?= View::e($entry[1]) ?></a></li>
-<?php endif; ?>
+                        <li><a class="weather-menu-link<?= $key === $activePage ? ' active' : '' ?>"<?= $key === $activePage ? ' aria-current="page"' : '' ?>
+                               href="<?= View::e($baseUrl) ?>/<?= View::e($entry[0]) ?>"><?= View::e($entry[1]) ?></a></li>
 <?php endforeach; ?>
-        </ul>
-        <div class="btn-group btn-group-sm" role="group" aria-label="Barevný motiv">
+                </section>
+<?php endforeach; ?>
+            </div>
+        </details>
+        <div class="btn-group btn-group-sm weather-theme" role="group" aria-label="Barevný motiv">
             <button type="button" class="btn btn-outline-secondary" data-theme-value="auto" title="Podle systému">Auto</button>
             <button type="button" class="btn btn-outline-secondary" data-theme-value="light" title="Světlý motiv">☀</button>
             <button type="button" class="btn btn-outline-secondary" data-theme-value="dark" title="Tmavý motiv">☾</button>
