@@ -69,11 +69,12 @@ final class ChmiGateway
      */
     public function fetch(string $resource): array
     {
-        if (!isset(self::RESOURCES[$resource])) {
+        $resources = $this->resources();
+        if (!isset($resources[$resource])) {
             throw new RuntimeException('Požadovaný zdroj ČHMÚ není povolen.');
         }
 
-        $definition = self::RESOURCES[$resource];
+        $definition = $resources[$resource];
         $cached = $this->readCache($resource);
         if ($cached !== null) {
             $age = $this->ageSeconds($cached['fetchedAt']);
@@ -111,7 +112,7 @@ final class ChmiGateway
     /** Odstraní poškozenou nebo nevalidní odpověď z cache. */
     public function invalidate(string $resource): void
     {
-        if (!isset(self::RESOURCES[$resource]) || $this->cacheDirectory === null) {
+        if (!isset($this->resources()[$resource]) || $this->cacheDirectory === null) {
             return;
         }
         $file = $this->cacheFile($resource);
@@ -138,7 +139,7 @@ final class ChmiGateway
             return null;
         }
         $body = base64_decode($data['body'], true);
-        if (!is_string($body) || $body === '' || strlen($body) > self::RESOURCES[$resource]['maxBytes']) {
+        if (!is_string($body) || $body === '' || strlen($body) > $this->resources()[$resource]['maxBytes']) {
             $this->invalidate($resource);
             return null;
         }
@@ -261,6 +262,29 @@ final class ChmiGateway
     private function cacheFile(string $resource): string
     {
         return $this->cacheDirectory . DIRECTORY_SEPARATOR . $resource . '.json';
+    }
+
+    /** @return array<string, array{path: string, ttl: int, maxBytes: int}> */
+    private function resources(): array
+    {
+        $resources = self::RESOURCES;
+        $date = $this->now->format('Ymd');
+        foreach ([1, 2, 4] as $number) {
+            $resources['climate_meta' . $number . '_' . $date] = [
+                'path' => '/meteorology/climate/now/metadata/meta' . $number . '-' . $date . '.json',
+                'ttl' => 86400,
+                'maxBytes' => 15000000,
+            ];
+        }
+        foreach ([$this->now, $this->now->modify('-1 day')] as $day) {
+            $key = $day->format('Ymd');
+            $resources['kopisty_' . $key] = [
+                'path' => '/meteorology/climate/now/data/10m-0-20000-0-11433-' . $key . '.json',
+                'ttl' => 900,
+                'maxBytes' => 1500000,
+            ];
+        }
+        return $resources;
     }
 
     private static function prepareDirectory(string $directory): bool

@@ -112,7 +112,12 @@ return static function (): int {
             && strpos($body, 'Ovzduší ČHMÚ') !== false
             && strpos($body, 'PM2,5') !== false, 'air quality page has API, navigation and pollutants');
         check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
-        return 39;
+        [$status, $type, $body] = $request('/comparison.php');
+        check($status === 200 && strpos($body, 'data-api="/api/comparison.php"') !== false, 'comparison page and api wired');
+        check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');
+        check($request('/api/comparison.php', 'POST')[0] === 405, 'comparison rejects POST');
+        check($request('/api/comparison.php?hours=999')[0] === 400, 'comparison has bounded fixed window');
+        return 43;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

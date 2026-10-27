@@ -5,7 +5,7 @@ Data **pouze čte** z původní tabulky `pws_observations`, kterou dál plní
 beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 (`history.php`, `history5.php`) zůstávají funkční.
 
-> Stav: **Fáze 1 dokončena; Fáze 2 a Fáze 3 jsou rozpracované v pracovním stromu.**
+> Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
 > a cache s viditelným stavem zastaralosti. Další plán viz [Plán rozšíření](#plán-rozšíření).
@@ -149,6 +149,22 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
   a vše funguje dál, jen bez zrychlení.
 
 ## Nasazení na hosting
+
+### Přesnost teploty z Weather Underground
+
+Sběrné skripty `fetch_weather2.php` a původní `fetch_weather.php` požadují
+`numericPrecision=decimal`. Bez tohoto parametru vrací Weather Underground
+celočíselné hodnoty i při přesnějším původním měření. Předaná hodnota se
+ukládá bez zaokrouhlení; například 7,9 °C zůstane 7,9 °C.
+Hlavní stránka a porovnání s Kopisty zobrazují teploty na jednu desetinu
+(český zápis `7,9`, nikoli `8`). Výpočty zachovávají svou dosavadní přesnost.
+
+Aktualizovaný `fetch_weather2.php` je potřeba nahrát **na místo skutečně
+spouštěné CRONem**, podle současné konfigurace do kořene webu
+`/www/domains/oubrix.eu/fetch_weather2.php`, nejen do adresáře `Weather/`.
+Změna se projeví u nového měření po dalším běhu CRONu; staré již zaokrouhlené
+záznamy v DB se neopravují ani nevytvářejí chybějící desetiny.
+DB schéma se nemění. Nepřenášet hesla ani měnit CRON token.
 
 1. Nahrát do `/www/domains/oubrix.eu/Weather/` (zachovat strukturu):
    `bootstrap.php`, `config/`, `app/`, `public/`, `resources/`, `bin/`, `storage/`
@@ -367,11 +383,44 @@ aplikace skutečně načetla při požadavku na API; nejde o průběžný sběr 
 ani o automatické doplnění starší historie ČHMÚ. Pokud žádná platná hodnota
 ještě nebyla zachycena, zůstává koncentrace nedostupná.
 
+### `api/comparison.php`
+
+Stránka [Srovnání s Kopisty](public/comparison.php) porovnává teplotu vlastní
+stanice a ČHMÚ Kopisty (`0-20000-0-11433`) v °C za **24 uzavřených UTC hodin**.
+Endpoint nemá volitelné období: další parametry vracejí 400. Surová vlastní
+řada je omezena na 25 hodin a 3000 záznamů; z ČHMÚ se načtou nejvýše dva
+denní desetiminutové JSON soubory a aktuální metadata stanice, prvků a kvality.
+Veřejný klient nikdy nepředává URL upstreamu.
+
+Obě řady se samostatně agregují prostým průměrem dostupných vzorků do hodin
+`[začátek, konec)`. Nejde o oficiální hodinový produkt ČHMÚ ani důkaz úplnosti
+hodiny. Tabulka uvádí počty přijatých vzorků i vyloučených hodnot Kopist.
+ČHMÚ se přijímá jen s kvalitou **0 (Good)** a bez příznaku; neznámá kvalita,
+odhad nebo chybějící hodnota nevstupují do průměru. API zveřejňuje počty
+kódů kvality a příznaků. Vzorky stejného času s konfliktními hodnotami
+se vyloučí. Mezery nejsou nuly a nedoplňuje se do nich poslední známá hodnota.
+
+Rozdíl je `OuBrix − Kopisty` pouze pro hodiny, v nichž mají obě řady hodnotu.
+Časy se zobrazují v Europe/Prague s UTC posunem, takže se rozliší obě
+opakované hodiny při konci letního času. Kopisty jsou jiná lokalita asi
+5,2 km od OuBrix; poloha a nadmořská výška se načítají z aktuálních metadat.
+Jednotka ČHMÚ musí být potvrzena jako °C, nikoli odhadnuta podle hodnot.
+
+Výpadek ČHMÚ nezablokuje vlastní řadu a výpadek DB nezablokuje Kopisty;
+pokud selžou oba zdroje, API vrátí 503. Zastaralá gateway cache je označená.
+Metadata se obnovují po UTC datech (TTL 24 h), měření po 15 minutách.
+Hodnoty neznámé kvality mohou způsobit prázdnou řadu i při dostupném souboru;
+stránka tento stav vysvětluje. Srážky a vítr nejsou do této první verze
+srovnání zahrnuté.
+
 ## Lokální vývoj a testy
 
 ```powershell
 # všechny testy (unit + integrační nad SQLite + HTTP test skutečných souborů public/)
 php tests/run.php
+
+# ověření desetinné teploty ve frontendových modulech (Node.js, bez balíčků)
+node tests/Frontend/TemperaturePrecisionTest.mjs
 
 # lokální náhled bez produkční DB (testovací data 26 h)
 php -S 127.0.0.1:8765 -t public tests/support/router.php

@@ -15,6 +15,7 @@ $menu = [
     'stats' => ['stats.php', 'Statistiky'],
     'analytics' => ['analytics.php', 'Analytika'],
     'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
+    'comparison' => ['comparison.php', 'Kopisty'],
 ];
 ?>
 <a class="visually-hidden-focusable" href="#obsah">Přeskočit na obsah</a>

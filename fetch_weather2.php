@@ -77,9 +77,10 @@ if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
 }
 
 try {
+    // Bez numericPrecision=decimal vrací WU teploty zaokrouhlené na celá čísla.
     // 1) Stažení aktuálního měření z WU (s časovým limitem)
     $url = sprintf(
-        'https://api.weather.com/v2/pws/observations/current?stationId=%s&format=json&units=m&apiKey=%s',
+        'https://api.weather.com/v2/pws/observations/current?stationId=%s&format=json&units=m&numericPrecision=decimal&apiKey=%s',
         rawurlencode(WU_STATION_ID),
         rawurlencode(WU_API_KEY)
     );

@@ -58,5 +58,12 @@ return static function (): int {
     check($shortResult['pressureTrend'] === null, 'no trend without history');
 
     check($service->build('UNKNOWN', new DateTimeImmutable('now', $utc)) === null, 'unknown station');
-    return 20;
+    $decimalPdo = Fixtures::database();
+    Fixtures::insert($decimalPdo, Fixtures::row(1, '2026-07-15 11:55:00', 7.9));
+    $decimalResult = (new CurrentConditionsService(new ObservationRepository($decimalPdo), $settings))
+        ->build('TEST', new DateTimeImmutable('2026-07-15 12:00:00', $utc));
+    check($decimalResult['current']['temp_c'] === 7.9, 'preserve measured tenths from database to current API');
+    check($decimalResult['today']['temp_min']['value'] === 7.9
+        && $decimalResult['today']['temp_max']['value'] === 7.9, 'preserve tenths in daily extremes');
+    return 22;
 };
