@@ -56,6 +56,7 @@ $scripts = ['/' => '/index.php', '/index.php' => '/index.php', '/api/current.php
     '/analytics.php' => '/analytics.php', '/api/analytics.php' => '/api/analytics.php',
     '/air-quality.php' => '/air-quality.php', '/api/air-quality.php' => '/api/air-quality.php',
     '/comparison.php' => '/comparison.php', '/api/comparison.php' => '/api/comparison.php',
+    '/climate.php' => '/climate.php', '/api/climate.php' => '/api/climate.php',
     '/stats.php' => '/stats.php', '/api/stats.php' => '/api/stats.php', '/api/windrose.php' => '/api/windrose.php'];
 if (!isset($scripts[$path])) {
     http_response_code(404);

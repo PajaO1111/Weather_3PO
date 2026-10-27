@@ -8,7 +8,9 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
-> a cache s viditelným stavem zastaralosti. Další plán viz [Plán rozšíření](#plán-rozšíření).
+> a cache s viditelným stavem zastaralosti. Připravena je také fáze 5 – historické
+> Klima Kopisty s vypočtenými referenčními průměry 1991–2020.
+> Další plán viz [Plán rozšíření](#plán-rozšíření).
 
 ## Požadavky
 
@@ -149,6 +151,57 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
   a vše funguje dál, jen bez zrychlení.
 
 ## Nasazení na hosting
+
+### Fáze 5 – Klima Kopisty
+
+Stránka [public/climate.php](public/climate.php) je dostupná z menu **Klima Kopisty**.
+Nezávisí na databázi vlastní stanice. API [public/api/climate.php](public/api/climate.php)
+vrací 12 měsíců vybraného roku, referenci a počty přijatých let; bez parametru
+vybírá nejnovější rok publikovaného archivu. `?year=RRRR` vybírá jiný publikovaný
+uzavřený rok. Neplatný, nepublikovaný či aktuální rok vrací 400, nepovolená metoda
+405, nedostupná/nevalidní data bez použitelné cache 503.
+
+- Pevný zdroj `Open.Data.MLY` pro stanici `0-20000-0-11433`, nikoli regionální CSV:
+  [měsíční JSON Kopisty](https://opendata.chmi.cz/meteorology/climate/historical/data/monthly/mly-0-20000-0-11433.json).
+- Výběr je přesný: teplota `T / AVG / AVG`, srážky `SRA / 06:00 / SUM`.
+  Jednotky °C a mm se ověřují v historických metadatech denních prvků DLY,
+  nikoli převzetím mapování z aktuálních desetiminutových dat.
+- Referenční měsíční hodnota je průměr stejného měsíce v letech 1991–2020;
+  zobrazí se jen při 30 přijatých hodnotách. Počet přijatých let je v tabulce.
+  Chybějící údaje nejsou nuly. Příznaky `FLAG_REPEAT` a `FLAG_INTERRUPTED` i původní
+  číselná hodnota zůstávají v API; označené hodnoty se nepoužívají ve výpočtech/grafech.
+  Duplicity a neplatné hodnoty jsou explicitní chybou zdroje, nikoli náhradní nulou.
+- Roční srážky vyžadují 12 přijatých měsíců. Referenční roční úhrn je průměr
+  30 úplných ročních součtů. Roční průměr teploty se nepočítá.
+- Jde o **vypočtený referenční průměr ČHMÚ Kopisty 1991–2020**, ne oficiálně
+  publikovaný normál ČHMÚ ani normál OuBrix. Nepotvrzuje homogenitu řady ani úplnost
+  denních podkladů; publikované příznaky a metadata nejsou garancí těchto vlastností.
+- Archiv se znovu načítá po 24 hodinách, metadata po 7 dnech, včetně jejich
+  publikovaného data vytvoření a verze. Revize tak nezůstanou v cache neomezeně.
+  Při výpadku se použije pouze viditelně označená stará cache.
+  Probíhající rok/recent, API30 ani jevy/phenomena nejsou do této stránky přimíchány.
+
+**Nasazení změn fáze 5:** nahrát nové i upravené soubory v `app/`, `public/`,
+`resources/` a veřejný `config/app.php`. Neměnit tajný `config.php`, CRON ani DB.
+`storage/cache/chmi/` musí být zapisovatelná pro PHP; její existující obsah
+(zejména poslední platné údaje ovzduší) nemažte ani nepřepisujte lokální kopií.
+Volitelná proměnná prostředí `WEATHER_CHMI_CACHE_DIR` určuje oddělenou neveřejnou
+cache (používají ji i izolované HTTP testy). Testy a jejich fixture data na hosting
+nepatří. První načtení stáhne přibližně 18 MB zdrojů; může trvat déle než další
+načtení. Lokálně byl vrchol paměti PHP přibližně 92 MiB, doporučen je limit alespoň 128 MiB.
+
+Ověření po nahrání:
+`public/climate.php` a `public/api/climate.php` musí vracet 200, výběr jiného roku
+musí změnit grafy a tabulku. Zkontrolovat označení reference, počty `/30`,
+chybějící měsíce a informace o verzi zdrojů.
+
+Lokální regresní testy bez tajných údajů:
+
+```powershell
+php tests\run.php
+node tests\Frontend\ClimateTest.mjs
+node tests\Frontend\TemperaturePrecisionTest.mjs
+```
 
 ### Přesnost teploty z Weather Underground
 

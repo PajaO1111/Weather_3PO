@@ -10,6 +10,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
 use OuBrix\Weather\Weather\Gateways\ChmiGateway;
+use OuBrix\Weather\Weather\Support\ChmiJson;
 
 final class KopistyService
 {
@@ -32,16 +33,16 @@ final class KopistyService
         $meta1 = $this->load('climate_meta1_' . $date, $sources);
         $meta2 = $this->load('climate_meta2_' . $date, $sources);
         $meta4 = $this->load('climate_meta4_' . $date, $sources);
-        $stations = $this->rows($meta1, ['WSI', 'FULL_NAME', 'GEOGR1', 'GEOGR2', 'ELEVATION']);
+        $stations = ChmiJson::rows($meta1, ['WSI', 'FULL_NAME', 'GEOGR1', 'GEOGR2', 'ELEVATION']);
         $station = null;
         foreach ($stations as $row) {
             if ($row['WSI'] === self::WSI) {
                 $station = [
                     'id' => self::WSI,
                     'name' => (string) $row['FULL_NAME'],
-                    'longitude' => $this->number($row['GEOGR1']),
-                    'latitude' => $this->number($row['GEOGR2']),
-                    'elevation' => $this->number($row['ELEVATION']),
+                    'longitude' => ChmiJson::number($row['GEOGR1']),
+                    'latitude' => ChmiJson::number($row['GEOGR2']),
+                    'elevation' => ChmiJson::number($row['ELEVATION']),
                 ];
             }
         }
@@ -49,7 +50,7 @@ final class KopistyService
             throw new RuntimeException('Kopisty nejsou v aktuálních metadatech dostupné.');
         }
         $unit = null;
-        foreach ($this->rows($meta2, ['OBS_TYPE', 'WSI', 'EG_EL_ABBREVIATION', 'UN_DESCRIPTION']) as $row) {
+        foreach (ChmiJson::rows($meta2, ['OBS_TYPE', 'WSI', 'EG_EL_ABBREVIATION', 'UN_DESCRIPTION']) as $row) {
             if ($row['WSI'] === self::WSI && $row['OBS_TYPE'] === '10M' && $row['EG_EL_ABBREVIATION'] === 'T') {
                 $unit = trim((string) $row['UN_DESCRIPTION']);
             }
@@ -58,8 +59,8 @@ final class KopistyService
             throw new RuntimeException('Jednotka teploty Kopist není potvrzena jako °C.');
         }
         $qualities = [];
-        foreach ($this->rows($meta4, ['FLAG2', 'DESCRIPTION']) as $row) {
-            $qualities[(string) $this->number($row['FLAG2'])] = (string) $row['DESCRIPTION'];
+        foreach (ChmiJson::rows($meta4, ['FLAG2', 'DESCRIPTION']) as $row) {
+            $qualities[(string) ChmiJson::number($row['FLAG2'])] = (string) $row['DESCRIPTION'];
         }
         if (!isset($qualities['0']) || strpos($qualities['0'], 'Good/') !== 0) {
             throw new RuntimeException('Číselník kvality nepotvrzuje kvalitní měření.');
@@ -70,16 +71,16 @@ final class KopistyService
             try {
                 $document = $this->load('kopisty_' . $day->format('Ymd'), $sources);
                 $dailyPoints = [];
-                foreach ($this->rows($document, ['STATION', 'ELEMENT', 'DT', 'VAL', 'FLAG', 'QUALITY']) as $row) {
+                foreach (ChmiJson::rows($document, ['STATION', 'ELEMENT', 'DT', 'VAL', 'FLAG', 'QUALITY']) as $row) {
                     if ($row['STATION'] !== self::WSI || $row['ELEMENT'] !== 'T') {
                         continue;
                     }
-                    $time = $this->time($row['DT']);
+                    $time = ChmiJson::time($row['DT']);
                     if (substr($time, 0, 10) !== $day->format('Y-m-d')) {
                         throw new RuntimeException('Datum měření neodpovídá souboru Kopist.');
                     }
-                    $quality = $this->number($row['QUALITY']);
-                    $value = $row['VAL'] === null ? null : $this->number($row['VAL']);
+                    $quality = ChmiJson::number($row['QUALITY']);
+                    $value = $row['VAL'] === null ? null : ChmiJson::number($row['VAL']);
                     $dailyPoints[] = [
                         'time' => $time,
                         'temp_c' => $quality === 0.0 && $row['FLAG'] === '' ? $value : null,
@@ -104,7 +105,7 @@ final class KopistyService
             'items' => $points,
             'meta' => [
                 'unit' => $unit,
-                'sourceCreatedAt' => $this->time($meta1['datumVytvoreni'] ?? null),
+                'sourceCreatedAt' => ChmiJson::time($meta1['datumVytvoreni'] ?? null),
                 'sourceVersion' => (string) ($meta1['verzeDat'] ?? ''),
                 'sources' => $sources,
                 'warnings' => array_values(array_unique($warnings)),
@@ -130,53 +131,4 @@ final class KopistyService
         return $document;
     }
 
-    /**
-     * @param array<string, mixed> $document
-     * @param list<string> $required
-     * @return list<array<string, mixed>>
-     */
-    private function rows(array $document, array $required): array
-    {
-        $data = $document['data']['data'] ?? null;
-        if (!is_array($data) || !is_string($data['header'] ?? null) || !is_array($data['values'] ?? null)) {
-            throw new RuntimeException('Neočekávaná tabulková struktura ČHMÚ.');
-        }
-        $header = array_map('trim', explode(',', $data['header']));
-        if (array_diff($required, $header) !== [] || count(array_unique($header)) !== count($header)) {
-            throw new RuntimeException('Chybějící nebo duplicitní sloupce ČHMÚ.');
-        }
-        $rows = [];
-        foreach ($data['values'] as $values) {
-            if (!is_array($values) || count($values) !== count($header)) {
-                throw new RuntimeException('Neplatná délka řádku ČHMÚ.');
-            }
-            $rows[] = array_combine($header, $values);
-        }
-        return $rows;
-    }
-
-    private function number($value): float
-    {
-        $value = is_string($value) ? str_replace(',', '.', $value) : $value;
-        if (!is_numeric($value) || !is_finite((float) $value)) {
-            throw new RuntimeException('Neplatná číselná hodnota ČHMÚ.');
-        }
-        return (float) $value;
-    }
-
-    private function time($value): string
-    {
-        if (!is_string($value)) {
-            throw new RuntimeException('Chybějící čas ČHMÚ.');
-        }
-        $time = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s\Z', $value, new DateTimeZone('UTC'));
-        if ($time === false || $time->format('Y-m-d\TH:i:s\Z') !== $value) {
-            // Čas vytvoření metadat může mít zlomky sekund.
-            $time = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.v\Z', $value, new DateTimeZone('UTC'));
-            if ($time === false || $time->format('Y-m-d\TH:i:s.v\Z') !== $value) {
-                throw new RuntimeException('Neplatný UTC čas ČHMÚ.');
-            }
-        }
-        return $time->format('Y-m-d\TH:i:s\Z');
-    }
 }

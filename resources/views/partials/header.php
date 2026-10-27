@@ -16,6 +16,7 @@ $menu = [
     'analytics' => ['analytics.php', 'Analytika'],
     'air-quality' => ['air-quality.php', 'Ovzduší ČHMÚ'],
     'comparison' => ['comparison.php', 'Kopisty'],
+    'climate' => ['climate.php', 'Klima Kopisty'],
 ];
 ?>
 <a class="visually-hidden-focusable" href="#obsah">Přeskočit na obsah</a>
@@ -24,7 +25,7 @@ $menu = [
         <a class="navbar-brand fw-semibold" href="<?= View::e($baseUrl) ?>/index.php">
             <span aria-hidden="true">⛅</span> <?= View::e($appName) ?>
         </a>
-        <ul class="navbar-nav me-auto">
+        <ul class="navbar-nav me-auto flex-wrap">
 <?php foreach ($menu as $key => $entry): ?>
 <?php if ($key === $activePage): ?>
             <li class="nav-item"><a class="nav-link active" aria-current="page" href="<?= View::e($baseUrl) ?>/<?= View::e($entry[0]) ?>"><?= View::e($entry[1]) ?></a></li>

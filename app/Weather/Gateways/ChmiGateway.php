@@ -18,6 +18,21 @@ final class ChmiGateway
 
     /** @var array<string, array{path: string, ttl: int, maxBytes: int}> */
     private const RESOURCES = [
+        'climate_history_station' => [
+            'path' => '/meteorology/climate/historical/metadata/meta1.json',
+            'ttl' => 604800,
+            'maxBytes' => 1500000,
+        ],
+        'climate_history_elements' => [
+            'path' => '/meteorology/climate/historical/metadata/meta2.json',
+            'ttl' => 604800,
+            'maxBytes' => 15000000,
+        ],
+        'kopisty_monthly' => [
+            'path' => '/meteorology/climate/historical/data/monthly/mly-0-20000-0-11433.json',
+            'ttl' => 86400,
+            'maxBytes' => 12000000,
+        ],
         'air_metadata' => [
             'path' => '/air_quality/now/metadata/metadata.json',
             'ttl' => 86400,

@@ -11,7 +11,11 @@ return static function (): int {
     $command = escapeshellarg(PHP_BINARY) . " -S 127.0.0.1:$port -t " . escapeshellarg($root . '/public')
         . ' ' . escapeshellarg($root . '/tests/support/router.php');
     $null = DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null';
-    $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root);
+    require_once dirname(__DIR__) . '/support/ClimateFixtures.php';
+    $cache = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'weather-http-climate-' . bin2hex(random_bytes(6));
+    ClimateFixtures::cache($cache);
+    $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
+    $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
 
     /** @return array{0:int,1:string,2:string} [status, content-type, body] */
@@ -117,7 +121,28 @@ return static function (): int {
         check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');
         check($request('/api/comparison.php', 'POST')[0] === 405, 'comparison rejects POST');
         check($request('/api/comparison.php?hours=999')[0] === 400, 'comparison has bounded fixed window');
-        return 43;
+        [$status, $type, $body] = $request('/climate.php');
+        check($status === 200 && strpos($type, 'text/html') === 0
+            && strpos($body, 'data-api="/api/climate.php"') !== false, 'climate page wired');
+        check(strpos($body, 'js/climate.js') !== false && strpos($body, 'Klima Kopisty') !== false
+            && strpos($body, 'FLAG_REPEAT') !== false && strpos($body, 'navbar-nav me-auto flex-wrap') !== false,
+            'climate module, wrapping menu and methodology');
+        [$status, $type, $body] = $request('/api/climate.php');
+        $climate = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $climate['year'] === 2020 && count($climate['items']) === 12, 'actual climate API default year');
+        check($climate['reference']['months'][0]['temperature']['count'] === 30
+            && $climate['reference']['rainfallAnnual'] === 954.0, 'actual climate API reference calculations');
+        [$status, , $body] = $request('/api/climate.php?year=1991');
+        check($status === 200 && json_decode($body, true)['year'] === 1991, 'climate year selection');
+        check($request('/api/climate.php', 'POST')[0] === 405, 'climate rejects POST');
+        check($request('/api/climate.php?year[]=1991')[0] === 400
+            && $request('/api/climate.php?year=oops')[0] === 400
+            && $request('/api/climate.php?station=other')[0] === 400, 'climate rejects invalid query shapes');
+        check($request('/api/climate.php?year=1800')[0] === 400
+            && $request('/api/climate.php?year=' . gmdate('Y'))[0] === 400, 'climate rejects unpublished and current year');
+        check($request('/assets/js/climate.js')[0] === 200, 'climate module served');
+        return 52;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {
@@ -129,5 +154,7 @@ return static function (): int {
             }
         }
         proc_close($process);
+        foreach (glob($cache . DIRECTORY_SEPARATOR . '*.json') ?: [] as $file) unlink($file);
+        rmdir($cache);
     }
 };

@@ -62,7 +62,8 @@ return [
     'weather_daily_aggregate_cache' => true,
 
     // Veřejná data ČHMÚ (složka zůstává mimo public/ a je v .gitignore).
-    'chmi_cache_dir' => null,
+    // Volitelná samostatná cache také pro izolované HTTP testy.
+    'chmi_cache_dir' => getenv('WEATHER_CHMI_CACHE_DIR') ?: null,
 
     // Pevné verze knihoven z CDN včetně SRI otisků (CSP domény povoluje cdn.jsdelivr.net).
     'cdn' => [
