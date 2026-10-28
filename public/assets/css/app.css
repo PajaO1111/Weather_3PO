@@ -56,6 +56,33 @@ body {
     background: var(--bs-tertiary-bg);
 }
 
+.svrs-duration-chart {
+    width: 100%;
+    min-height: 20rem;
+    margin-bottom: 1.5rem;
+}
+
+.air-quality-map {
+    width: 100%;
+    height: min(65vh, 36rem);
+    min-height: 24rem;
+    background: var(--bs-tertiary-bg);
+}
+
+.air-quality-map-legend > li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.air-quality-map-legend-swatch {
+    display: inline-block;
+    width: 1.15rem;
+    height: 1.15rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.2rem;
+}
+
 main {
     flex: 1 0 auto;
 }

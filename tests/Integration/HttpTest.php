@@ -22,6 +22,8 @@ return static function (): int {
     RadarFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/AirQualityForecastFixtures.php';
     AirQualityForecastFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/AirQualityMapFixtures.php';
+    AirQualityMapFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/AirQualityHistoryFixtures.php';
     AirQualityHistoryFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
@@ -131,7 +133,9 @@ return static function (): int {
             'air quality page explains forecast and source limitations');
         check(strpos($body, 'air-quality-comparison-station') !== false
             && strpos($body, 'air-quality-history-tab') !== false
-            && strpos($body, 'air-quality-history-events') !== false, 'air page provides nearby station comparison and SVRS history tab');
+            && strpos($body, 'air-quality-history-events') !== false
+            && strpos($body, 'air-quality-map-tab') !== false
+            && strpos($body, 'leaflet@1.9.4') !== false, 'air page provides comparison, history, and map tabs');
         check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
         check($request('/api/air-quality.php?compare[]=LIT')[0] === 400
             && $request('/api/air-quality.php?url=other')[0] === 400, 'air quality API rejects malformed comparison selectors and arbitrary parameters');
@@ -159,6 +163,19 @@ return static function (): int {
             'air forecast API rejects invalid pollutant and arbitrary query parameters');
         check($request('/api/air-quality-forecast.php', 'POST')[0] === 405
             && $request('/assets/js/air-quality.js')[0] === 200, 'air forecast API method and frontend module');
+        [$status, $type, $body] = $request('/api/air-quality-map.php');
+        $airMap = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $airMap['component']['code'] === 'PM10' && $airMap['type']['code'] === 'hours',
+            'air quality map API returns the default map');
+        check($airMap['raster']['gridStepMeters'] === 100
+            && $airMap['raster']['width'] === 3000 && strpos($airMap['map'], 'data:image/png;base64,') === 0
+            && count($airMap['legend']['values']) === 2, 'air map API validates and returns georeferenced raster and legend');
+        check($request('/api/air-quality-map.php?component=NO2&type=days')[0] === 400
+            && $request('/api/air-quality-map.php?component[]=PM10')[0] === 400
+            && $request('/api/air-quality-map.php?url=other')[0] === 400, 'air map API rejects unsupported combinations and queries');
+        check($request('/api/air-quality-map.php', 'POST')[0] === 405
+            && $request('/assets/js/air-quality.js')[0] === 200, 'air map API method and frontend module');
         [$status, $type, $body] = $request('/comparison.php');
         check($status === 200 && strpos($body, 'data-api="/api/comparison.php"') !== false, 'comparison page and api wired');
         check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');
@@ -258,7 +275,7 @@ return static function (): int {
         ], JSON_THROW_ON_ERROR));
         [$status, , $body] = $request('/api/radar.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
-        return 80;
+        return 84;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

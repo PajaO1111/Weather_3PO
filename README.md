@@ -8,7 +8,7 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku kvality ovzduší s měřením Most (UMOM), srovnáním okolní stanice,
-> předpovědí a historií SVRS Ústeckého kraje (fáze 9C). Stránka historického Klima Kopisty
+> předpovědí, historií SVRS Ústeckého kraje a operativní mapou ČHMÚ (fáze 9D). Stránka historického Klima Kopisty
 > nyní odděluje oficiální normály ČHMÚ 1991–2020 od vlastního výpočtu z archivu.
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
@@ -687,6 +687,31 @@ rozbalená velikost (8 MB) a cílový JSON (150 KB). Hosting musí mít povolen�
 PHP rozšíření `ZipArchive`, jinak endpoint vrací 503. Index i archivy mají
 15minutovou cache; zastaralá data jsou označena, nedostupný nebo neplatný
 zdroj nevrací prázdnou úspěšnou předpověď.
+
+### `api/air-quality-map.php?component=PM10&type=hours`
+
+Operativní mapa ČHMÚ se zobrazuje jako průhledná vrstva nad mapovým podkladem
+OpenStreetMap. `component` podporuje `PM10`, `PM2_5`, `NO2`, `O3` a `SO2`;
+parametr `type` nabízí pouze kombinace zveřejněné v legendě ČHMÚ:
+hodinový průměr, denní průměr a u příslušných látek také denní maximum
+hodinového nebo osmihodinového průměru. API volí nejnověji publikovaný soubor
+podle času v katalogovém indexu, ověří obsah ZIPu, jeho časové období, PNG
+a statická metadata. Zobrazuje oficiální legendu, interval dat, stáří a stav
+cache. Při výpadku upstreamu se starší uložená mapa označí jako zastaralá.
+
+Georeference vychází z rozsahu EPSG:3857 v oficiálních statických metadatech;
+kontrolují se i souřadnice rohů a poměr stran PNG. U aktuálně ověřeného souboru
+je rozsah gridu 895,5 × 576 km, PNG má 3000 × 1929 px a metadata uvádějí
+100m krok zdrojového gridu. Zobrazený PNG pixel proto pokrývá přibližně
+299 × 299 m. Barevná legenda vyjadřuje intervaly, nikoli přesnou koncentraci;
+API ani mapa neumožňují bodový číselný odečet. Jde o plošný výstup vytvořený
+z operativních měření a dalších podkladů, nikoli o měření v každém místě
+nebo předpověď.
+
+Katalog a archivy mají pětiminutovou cache, statická metadata týdenní.
+ZIP se čte bez extrakce, s omezením velikosti; hosting potřebuje PHP
+rozšíření `ZipArchive`. Mapa je připisována ČHMÚ pod licencí [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Při použití podkladu OpenStreetMap se provozovateli dlaždic předává IP adresa.
 
 ### `api/comparison.php`
 

@@ -10,6 +10,7 @@ function element(value = '') {
         value,
         checked: true,
         dataset: {},
+        style: {},
         children: [],
         attributes: new Map(),
         events: new Map(),
@@ -21,9 +22,11 @@ function element(value = '') {
         },
         setAttribute(key, text) { this.attributes.set(key, text); },
         addEventListener(key, callback) { this.events.set(key, callback); },
-        append(child) {
-            this.children.push(child);
-            if (child.selected) this.value = child.value;
+        append(...children) {
+            for (const child of children) {
+                this.children.push(child);
+                if (child.selected) this.value = child.value;
+            }
         },
         replaceChildren() { this.children = []; this.value = ''; },
         focus() { this.focused = true; },
@@ -52,7 +55,11 @@ for (const id of [
     'air-quality-live-tab', 'air-quality-history-tab', 'air-quality-live-panel', 'air-quality-history-panel',
     'air-quality-history-error', 'air-quality-history-warning', 'air-quality-history-source',
     'air-quality-history-count', 'air-quality-history-events', 'air-quality-history-year',
-    'air-quality-history-pollutant', 'air-quality-history-type',
+    'air-quality-history-pollutant', 'air-quality-history-type', 'air-quality-history-chart',
+    'air-quality-map-tab', 'air-quality-map-panel', 'air-quality-map-component', 'air-quality-map-type',
+    'air-quality-map-opacity', 'air-quality-map-opacity-value', 'air-quality-map', 'air-quality-map-status',
+    'air-quality-map-source', 'air-quality-map-error', 'air-quality-map-warning',
+    'air-quality-map-legend-description', 'air-quality-map-legend',
 ]) {
     elements.set(id, element());
 }
@@ -60,6 +67,10 @@ elements.set('air-quality-forecast-range', element());
 elements.get('air-quality').dataset.apiAirQuality = '/api/air-quality.php';
 elements.get('air-quality-comparison-station').value = '';
 elements.get('air-quality-history-panel').dataset.api = '/api/air-quality-history.php';
+elements.get('air-quality-map-panel').dataset.api = '/api/air-quality-map.php';
+elements.get('air-quality-map-component').value = 'PM10';
+elements.get('air-quality-map-type').value = 'hours';
+elements.get('air-quality-map-opacity').value = '75';
 elements.get('air-quality').querySelector = selector => {
     const component = selector.match(/data-measurement="([^"]+)"/)[1];
     if (!measurements.has(component)) measurements.set(component, element());
@@ -71,15 +82,51 @@ elements.get('air-quality-forecast-horizon').value = '72';
 globalThis.document = {
     getElementById: id => elements.get(id) || null,
     createElement: () => element(),
+    documentElement: {},
+    addEventListener() {},
 };
 globalThis.window = { addEventListener() {} };
+globalThis.getComputedStyle = () => ({
+    getPropertyValue: () => '#212529',
+});
+let displayedMap = null;
+globalThis.L = {
+    map() {
+        return {
+            attributionControl: { addAttribution() {} },
+            setView() { return this; },
+            invalidateSize() {},
+        };
+    },
+    tileLayer() {
+        return { on() { return this; }, addTo() { return this; } };
+    },
+    circleMarker() {
+        return { bindTooltip() { return this; }, addTo() { return this; } };
+    },
+    imageOverlay(image, bounds, options) {
+        const handlers = {};
+        displayedMap = { image, bounds, options, opacity: options.opacity };
+        return {
+            once(name, callback) { handlers[name] = callback; return this; },
+            off(name) { delete handlers[name]; return this; },
+            addTo() { if (handlers.load) handlers.load(); return this; },
+            remove() { this.removed = true; return this; },
+            setOpacity(value) { displayedMap.opacity = value; },
+        };
+    },
+};
 let chartOption = null;
+let historyChartOption = null;
 let chartClears = 0;
 globalThis.echarts = {
-    init: () => ({
+    init: element => ({
         clear() { chartClears++; },
         resize() {},
-        setOption(option) { chartOption = option; },
+        setOption(option) {
+            if (element === elements.get('air-quality-history-chart')) historyChartOption = option;
+            else chartOption = option;
+        },
     }),
 };
 
@@ -144,10 +191,33 @@ const history = {
         warnings: [],
     },
 };
+const map = {
+    component: { code: 'PM10', label: 'PM10' },
+    type: { code: 'hours', label: 'Hodinový průměr' },
+    period: {
+        start: '2026-10-28T09:00:00Z', end: '2026-10-28T10:00:00Z',
+        createdAt: '2026-10-28T10:01:00Z', ageSeconds: 2100,
+    },
+    map: 'data:image/png;base64,abc',
+    bounds: [[48.109, 11.5074], [51.4484, 19.5518]],
+    raster: {
+        width: 3000, height: 1929, gridStepMeters: 100,
+        pixelWidthMeters: 298.5, pixelHeightMeters: 298.6, crs: 'EPSG:3857',
+    },
+    legend: {
+        description: 'hodinový průměr', units: 'µg∙m−3',
+        values: [{ color: '#C7EAFB', label: '<20' }, { color: '#FFFFFF', label: 'Neúplná data' }],
+    },
+    meta: {
+        stale: false, warnings: [],
+        sources: { map: { fetchedAt: '2026-10-28T10:33:00Z' } },
+    },
+};
 let forecastFailure = false;
 const forecastUrls = [];
 const comparisonUrls = [];
 let historyRequests = 0;
+const mapUrls = [];
 
 globalThis.fetch = async url => {
     if (url.startsWith('/api/air-quality.php')) {
@@ -157,6 +227,14 @@ globalThis.fetch = async url => {
     if (url === '/api/air-quality-history.php') {
         historyRequests++;
         return { ok: true, status: 200, json: async () => structuredClone(history) };
+    }
+    if (url.startsWith('/api/air-quality-map.php')) {
+        mapUrls.push(url);
+        const selected = structuredClone(map);
+        const params = new URL(url, 'https://local').searchParams;
+        selected.component.code = params.get('component');
+        selected.type.code = params.get('type');
+        return { ok: true, status: 200, json: async () => selected };
     }
     forecastUrls.push(url);
     if (forecastFailure) {
@@ -192,15 +270,41 @@ elements.get('air-quality-history-tab').events.get('click')();
 await settle();
 assert.equal(historyRequests, 1);
 assert.equal(elements.get('air-quality-history-events').children.length, 3);
+assert.deepEqual(historyChartOption.series[0].data, [55.8, 53]);
+assert.equal(historyChartOption.xAxis.name, 'Hodiny');
+assert.match(historyChartOption.yAxis.data[0], /3\. 12\. 2010/);
+assert.match(historyChartOption.tooltip.formatter({ dataIndex: 0 }), /Délka: 55,8 h/);
 assert.match(elements.get('air-quality-history-events').children[1].children[0].children[2].textContent, /<img>/);
 assert.match(elements.get('air-quality-history-source').textContent, /CC BY 4.0/);
 elements.get('air-quality-history-year').value = '2010';
 elements.get('air-quality-history-year').events.get('change')();
 assert.equal(elements.get('air-quality-history-events').children.length, 2);
+assert.deepEqual(historyChartOption.series[0].data, [55.8, 53].slice(0, 2));
 elements.get('air-quality-history-tab').events.get('keydown')({
     key: 'ArrowLeft', preventDefault() {},
 });
 assert.equal(elements.get('air-quality-live-tab').focused, true);
+
+elements.get('air-quality-map-tab').events.get('click')();
+await settle();
+assert.equal(mapUrls.length, 1);
+assert.match(mapUrls[0], /component=PM10&type=hours$/);
+assert.equal(displayedMap.image, 'data:image/png;base64,abc');
+assert.deepEqual(displayedMap.bounds, [[48.109, 11.5074], [51.4484, 19.5518]]);
+assert.equal(elements.get('air-quality-map-legend').children.length, 2);
+assert.equal(elements.get('air-quality-map-legend').children[0].children[1].textContent, '<20');
+assert.match(elements.get('air-quality-map-source').textContent, /100 m.*299.*299 m/);
+elements.get('air-quality-map-component').value = 'NO2';
+elements.get('air-quality-map-component').events.get('change')();
+await settle();
+assert.equal(elements.get('air-quality-map-type').value, 'hours');
+elements.get('air-quality-map-type').value = 'max1h';
+elements.get('air-quality-map-type').events.get('change')();
+await settle();
+assert.match(mapUrls[mapUrls.length - 1], /component=NO2&type=max1h$/);
+elements.get('air-quality-map-opacity').value = '40';
+elements.get('air-quality-map-opacity').events.get('input')();
+assert.equal(displayedMap.opacity, 0.4);
 
 elements.get('air-quality-forecast-horizon').value = '24';
 elements.get('air-quality-forecast-horizon').events.get('change')();

@@ -11,6 +11,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
 use Throwable;
+use OuBrix\Weather\Weather\Support\AirQualityMapProduct;
 use OuBrix\Weather\Weather\Support\RadarProduct;
 
 final class ChmiGateway
@@ -70,6 +71,16 @@ final class ChmiGateway
             'path' => '/air_quality/historical/smog/historicky_prehled_smogovych_situaci.csv',
             'ttl' => 86400,
             'maxBytes' => 250000,
+        ],
+        'air_quality_map_index' => [
+            'path' => '/air_quality/now/maps/',
+            'ttl' => 300,
+            'maxBytes' => 1000000,
+        ],
+        'air_quality_map_static' => [
+            'path' => '/air_quality/now/maps/airquality_NRT-map_static.json',
+            'ttl' => 604800,
+            'maxBytes' => 500000,
         ],
         'air_forecast_index' => [
             'path' => '/air_quality/now/forecast/',
@@ -366,6 +377,19 @@ final class ChmiGateway
                 'ttl' => 900,
                 'maxBytes' => 2500000,
             ];
+        }
+        if ($requested !== null
+            && preg_match('/^air_map_archive_(PM10|PM2_5|NO2|O3|SO2)_(hours|days|max1h|max8h)_(\d{2}|daily)$/D', $requested, $match)) {
+            try {
+                $filename = AirQualityMapProduct::filename($match[1], $match[2], $match[3]);
+                $resources[$requested] = [
+                    'path' => '/air_quality/now/maps/' . $filename,
+                    'ttl' => 300,
+                    'maxBytes' => 1000000,
+                ];
+            } catch (RuntimeException $exception) {
+                // Invalid component/type/slot combinations are deliberately not registered.
+            }
         }
         if ($requested !== null && preg_match('/^radar_frame_(maxz|merge)_(\d{12})$/D', $requested, $match)) {
             $product = $match[1];

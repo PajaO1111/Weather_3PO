@@ -2,6 +2,7 @@
  * Bezpečné zobrazení aktuální kvality ovzduší ČHMÚ pro Most.
  */
 import { fetchJson, formatNumber, formatTime } from './api.js';
+import { themeColors } from './charts.js';
 
 const root = document.getElementById('air-quality');
 const ui = {
@@ -20,20 +21,51 @@ const ui = {
 let state = null;
 let currentRequest = 0;
 const historyPanel = document.getElementById('air-quality-history-panel');
+const mapPanel = document.getElementById('air-quality-map-panel');
 const historyUi = historyPanel ? {
     error: document.getElementById('air-quality-history-error'),
     warning: document.getElementById('air-quality-history-warning'),
     source: document.getElementById('air-quality-history-source'),
     count: document.getElementById('air-quality-history-count'),
     events: document.getElementById('air-quality-history-events'),
+    chart: document.getElementById('air-quality-history-chart'),
     year: document.getElementById('air-quality-history-year'),
     pollutant: document.getElementById('air-quality-history-pollutant'),
     type: document.getElementById('air-quality-history-type'),
 } : null;
 let historyPayload = null;
 let historyRequest = 0;
+let historyChart = null;
+const mapUi = mapPanel ? {
+    component: document.getElementById('air-quality-map-component'),
+    type: document.getElementById('air-quality-map-type'),
+    opacity: document.getElementById('air-quality-map-opacity'),
+    opacityValue: document.getElementById('air-quality-map-opacity-value'),
+    map: document.getElementById('air-quality-map'),
+    status: document.getElementById('air-quality-map-status'),
+    source: document.getElementById('air-quality-map-source'),
+    error: document.getElementById('air-quality-map-error'),
+    warning: document.getElementById('air-quality-map-warning'),
+    legendDescription: document.getElementById('air-quality-map-legend-description'),
+    legend: document.getElementById('air-quality-map-legend'),
+} : null;
+const mapTypes = {
+    PM10: [['hours', 'Hodinový průměr'], ['days', 'Denní průměr']],
+    PM2_5: [['hours', 'Hodinový průměr'], ['days', 'Denní průměr']],
+    NO2: [['hours', 'Hodinový průměr'], ['max1h', 'Maximální hodinový průměr za den']],
+    O3: [['hours', 'Hodinový průměr'], ['max1h', 'Maximální hodinový průměr za den'],
+        ['max8h', 'Maximální 8hodinový průměr za den']],
+    SO2: [['hours', 'Hodinový průměr'], ['days', 'Denní průměr']],
+};
+let mapInstance = null;
+let mapOverlay = null;
+let mapPayload = null;
+let mapRequest = 0;
 const pollutantLabels = { PM10: 'PM10', O3: 'O₃', SO2: 'SO₂', NO2: 'NO₂' };
 const eventLabels = { 'smogová situace': 'Smogová situace', regulace: 'Regulace', varování: 'Varování' };
+const historyDateFormat = new Intl.DateTimeFormat('cs-CZ', {
+    timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric',
+});
 const forecastRoot = document.getElementById('air-quality-forecast');
 const forecastUi = forecastRoot ? {
     pollutant: document.getElementById('air-quality-forecast-pollutant'),
@@ -209,8 +241,11 @@ function renderHistory() {
         (!historyUi.year.value || event.issuedAt.slice(0, 4) === historyUi.year.value)
         && (!historyUi.pollutant.value || event.pollutant === historyUi.pollutant.value)
         && (!historyUi.type.value || event.type === historyUi.type.value));
+    const chartEvents = events.filter(event => Number.isFinite(event.durationHours) && event.durationHours >= 0);
+    renderHistoryChart(chartEvents);
     historyUi.events.replaceChildren();
-    historyUi.count.textContent = `${events.length} ${events.length === 1 ? 'událost' : 'událostí'} pro ${historyPayload.area}.`;
+    historyUi.count.textContent = `${events.length} ${events.length === 1 ? 'událost' : 'událostí'} pro ${historyPayload.area}; `
+        + `${chartEvents.length} s uvedenou délkou trvání.`;
     for (const event of events) {
         const item = document.createElement('li');
         const article = document.createElement('article');
@@ -248,6 +283,183 @@ function renderHistory() {
     setMessage(historyUi.warning, (historyPayload.meta.warnings || []).join(' '));
 }
 
+function renderHistoryChart(events) {
+    if (typeof echarts === 'undefined') {
+        historyUi.chart.textContent = 'Graf se nepodařilo načíst. Délky a podrobnosti událostí zůstávají dostupné níže.';
+        return;
+    }
+    if (!historyChart) {
+        historyChart = echarts.init(historyUi.chart, null, { renderer: 'canvas' });
+        window.addEventListener('resize', () => historyChart && historyChart.resize());
+    }
+    const colors = themeColors();
+    const categories = events.map(event => {
+        const date = historyDateFormat.format(new Date(event.issuedAt));
+        return `${date} · ${eventLabels[event.type] || event.type} · ${pollutantLabels[event.pollutant] || event.pollutant}`;
+    });
+    const maxHeight = 1100;
+    historyUi.chart.style.height = `${Math.max(320, Math.min(events.length * 34 + 80, maxHeight))}px`;
+    historyChart.resize();
+    historyUi.chart.setAttribute('aria-label',
+        `Délka ${events.length} historických vyhlášení SVRS v hodinách pro ${historyPayload.area}`);
+    historyChart.setOption({
+        aria: {
+            enabled: true,
+            description: `Délka jednotlivých historických vyhlášení SVRS v hodinách pro ${historyPayload.area}.`,
+        },
+        animation: false,
+        textStyle: { color: colors.text },
+        grid: { left: 190, right: 45, top: 12, bottom: 38 },
+        xAxis: {
+            type: 'value',
+            name: 'Hodiny',
+            min: 0,
+            axisLabel: { color: colors.muted },
+            splitLine: { lineStyle: { color: colors.grid } },
+        },
+        yAxis: {
+            type: 'category',
+            inverse: true,
+            data: categories,
+            axisLabel: { color: colors.muted, width: 175, overflow: 'truncate' },
+        },
+        tooltip: {
+            trigger: 'item',
+            renderMode: 'richText',
+            formatter: parameter => {
+                const event = events[parameter.dataIndex];
+                return `${eventLabels[event.type] || event.type} · ${pollutantLabels[event.pollutant] || event.pollutant}\n`
+                    + `Vyhlášení: ${formatTime(event.issuedAt, 'datetime')}\n`
+                    + `Odvolání: ${event.endedAt ? formatTime(event.endedAt, 'datetime') : 'dosud neodvoláno'}\n`
+                    + `Délka: ${formatNumber(event.durationHours, 1)} h`;
+            },
+        },
+        series: [{
+            name: 'Délka vyhlášení',
+            type: 'bar',
+            data: events.map(event => event.durationHours),
+            barMaxWidth: 22,
+            label: {
+                show: true,
+                position: 'right',
+                color: colors.text,
+                formatter: parameter => `${formatNumber(parameter.value, 1)} h`,
+            },
+            itemStyle: { color: '#0b7285', borderRadius: [0, 3, 3, 0] },
+        }],
+    }, { notMerge: true });
+}
+
+function updateMapTypes() {
+    if (!mapUi) return;
+    const options = mapTypes[mapUi.component.value] || [];
+    const previous = mapUi.type.value;
+    mapUi.type.replaceChildren();
+    for (const [value, label] of options) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        mapUi.type.append(option);
+    }
+    mapUi.type.value = options.some(([value]) => value === previous) ? previous : options[0][0];
+}
+
+function setupAirQualityMap() {
+    if (mapInstance) return;
+    if (!globalThis.L) throw new Error('Mapovou knihovnu nelze načíst. Zkontrolujte připojení nebo blokování CDN.');
+    mapInstance = globalThis.L.map(mapUi.map, { scrollWheelZoom: false }).setView([50.51039, 13.64525], 8);
+    globalThis.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).on('tileerror', () => {
+        mapUi.status.textContent = 'Mapový podklad se nepodařilo načíst; ověřte polohu opatrně.';
+    }).addTo(mapInstance);
+    globalThis.L.circleMarker([50.51039, 13.64525], {
+        radius: 5, color: '#202040', fillColor: '#ffffff', fillOpacity: 1, weight: 2,
+    }).bindTooltip('Most · orientační poloha').addTo(mapInstance);
+    mapInstance.attributionControl.addAttribution('Data mapy: ČHMÚ');
+}
+
+function renderAirQualityMap(payload) {
+    mapPayload = payload;
+    mapUi.status.textContent = `${payload.component.label} · ${payload.type.label} · `
+        + `${formatTime(payload.period.start, 'datetime')}–${formatTime(payload.period.end, 'datetime')} · `
+        + `stáří ${Math.floor(payload.period.ageSeconds / 3600)} h `
+        + `${Math.floor((payload.period.ageSeconds % 3600) / 60)} min${payload.meta.stale ? ' · ZASTARALÁ MAPA' : ''}.`;
+    mapUi.legendDescription.textContent = `${payload.legend.description}${payload.legend.units ? ` · ${payload.legend.units}` : ''}`;
+    mapUi.legend.replaceChildren();
+    for (const item of payload.legend.values) {
+        const entry = document.createElement('li');
+        const swatch = document.createElement('span');
+        swatch.className = 'air-quality-map-legend-swatch';
+        swatch.style.backgroundColor = item.color;
+        swatch.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = item.label;
+        entry.append(swatch, label);
+        mapUi.legend.append(entry);
+    }
+    const source = payload.meta.sources.map;
+    mapUi.source.textContent = `Zdroj vytvořen ${formatTime(payload.period.createdAt, 'datetime')}; `
+        + `načten ${formatTime(source.fetchedAt, 'datetime')}. PNG ${payload.raster.width} × ${payload.raster.height} px; `
+        + `krok vstupního gridu ${formatNumber(payload.raster.gridStepMeters, 0)} m; `
+        + `zobrazený pixel přibližně ${formatNumber(payload.raster.pixelWidthMeters, 0)} × `
+        + `${formatNumber(payload.raster.pixelHeightMeters, 0)} m (${payload.raster.crs}).`;
+    setMessage(mapUi.warning, (payload.meta.warnings || []).join(' '));
+}
+
+async function loadAirQualityMap() {
+    if (!mapUi) return;
+    const requestId = ++mapRequest;
+    mapPanel.setAttribute('aria-busy', 'true');
+    mapUi.status.textContent = 'Načítám operativní mapu ČHMÚ…';
+    setMessage(mapUi.error, '');
+    setMessage(mapUi.warning, '');
+    try {
+        const query = new URLSearchParams({
+            component: mapUi.component.value,
+            type: mapUi.type.value,
+        });
+        const payload = await fetchJson(`${mapPanel.dataset.api}?${query.toString()}`, 30000);
+        if (requestId !== mapRequest) return;
+        setupAirQualityMap();
+        const candidate = globalThis.L.imageOverlay(payload.map, payload.bounds, {
+            opacity: Number(mapUi.opacity.value) / 100,
+            alt: `Operativní mapa ČHMÚ ${payload.component.label}, ${payload.type.label}`,
+        });
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                candidate.off('load');
+                candidate.off('error');
+                candidate.remove();
+                reject(new Error('Mapový rastr ČHMÚ se nepodařilo zobrazit včas.'));
+            }, 10000);
+            candidate.once('load', () => { clearTimeout(timer); resolve(); });
+            candidate.once('error', () => {
+                clearTimeout(timer);
+                candidate.remove();
+                reject(new Error('Mapový rastr ČHMÚ se nepodařilo zobrazit.'));
+            });
+            candidate.addTo(mapInstance);
+        });
+        if (requestId !== mapRequest) {
+            candidate.remove();
+            return;
+        }
+        if (mapOverlay) mapOverlay.remove();
+        mapOverlay = candidate;
+        renderAirQualityMap(payload);
+        mapInstance.invalidateSize();
+    } catch (exception) {
+        if (requestId === mapRequest) {
+            setMessage(mapUi.error, exception.message || 'Operativní mapu ČHMÚ se nepodařilo načíst.');
+            mapUi.status.textContent = 'Mapa není dostupná.';
+        }
+    } finally {
+        if (requestId === mapRequest) mapPanel.setAttribute('aria-busy', 'false');
+    }
+}
+
 async function loadHistory() {
     if (!historyUi) return;
     const requestId = ++historyRequest;
@@ -267,6 +479,7 @@ async function loadHistory() {
 const tabs = [
     { button: document.getElementById('air-quality-live-tab'), panel: document.getElementById('air-quality-live-panel') },
     { button: document.getElementById('air-quality-history-tab'), panel: historyPanel },
+    { button: document.getElementById('air-quality-map-tab'), panel: mapPanel },
 ].filter(tab => tab.button && tab.panel);
 
 function activateTab(index, focus = false) {
@@ -279,6 +492,7 @@ function activateTab(index, focus = false) {
     });
     if (focus) tabs[index].button.focus();
     if (tabs[index].panel === historyPanel && !historyPayload) loadHistory();
+    if (tabs[index].panel === mapPanel && !mapPayload) loadAirQualityMap();
 }
 
 tabs.forEach((tab, index) => {
@@ -300,6 +514,20 @@ if (ui.comparisonStation) {
 if (historyUi) {
     [historyUi.year, historyUi.pollutant, historyUi.type].forEach(select =>
         select.addEventListener('change', renderHistory));
+    document.addEventListener('weather:themechange', () => historyPayload && renderHistory());
+}
+if (mapUi) {
+    mapUi.component.addEventListener('change', () => {
+        updateMapTypes();
+        loadAirQualityMap();
+    });
+    mapUi.type.addEventListener('change', loadAirQualityMap);
+    mapUi.opacity.addEventListener('input', () => {
+        mapUi.opacityValue.textContent = `${mapUi.opacity.value} %`;
+        if (mapOverlay) mapOverlay.setOpacity(Number(mapUi.opacity.value) / 100);
+    });
+    updateMapTypes();
+    window.addEventListener('resize', () => mapInstance && mapInstance.invalidateSize());
 }
 
 function renderForecast(payload) {

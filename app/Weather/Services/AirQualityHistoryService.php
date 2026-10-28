@@ -79,6 +79,9 @@ final class AirQualityHistoryService
             }
             rewind($stream);
             $header = fgetcsv($stream, 4096, ',', '"', '\\');
+            if (is_array($header) && isset($header[0]) && substr($header[0], 0, 3) === "\xEF\xBB\xBF") {
+                $header[0] = substr($header[0], 3);
+            }
             if ($header !== ['latka', 'typ', 'oblast', 'vyhlaseni', 'odvolani', 'delka_trvani', 'poznamka']) {
                 throw new RuntimeException('CSV SVRS má neočekávanou hlavičku.');
             }
