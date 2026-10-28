@@ -20,6 +20,8 @@ return static function (): int {
     WarningFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/RadarFixtures.php';
     RadarFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/AirQualityForecastFixtures.php';
+    AirQualityForecastFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
@@ -121,7 +123,26 @@ return static function (): int {
         check(strpos($body, 'data-api-air-quality="/api/air-quality.php"') !== false
             && strpos($body, 'Ovzduší ČHMÚ') !== false
             && strpos($body, 'PM2,5') !== false, 'air quality page has API, navigation and pollutants');
+        check(strpos($body, 'data-api="/api/air-quality-forecast.php"') !== false
+            && strpos($body, 'Jak číst zobrazená data') !== false
+            && stripos($body, 'jednotka v metadatech předpovědi není uvedena') !== false,
+            'air quality page explains forecast and source limitations');
         check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
+        [$status, $type, $body] = $request('/api/air-quality-forecast.php?pollutant=PM10');
+        $airForecast = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $airForecast['area']['code'] === '892'
+            && $airForecast['pollutant']['code'] === 'PM10'
+            && $airForecast['pollutant']['unit'] === null, 'air forecast API uses Most and leaves unspecified unit null');
+        check(count($airForecast['items']) === 72 && $airForecast['currentMap']['type'] === 'mapa'
+            && $airForecast['meta']['source']['archiveCacheStatus'] === 'fresh',
+            'air forecast API returns typed hourly forecasts, separate map and provenance');
+        check($request('/api/air-quality-forecast.php?pollutant=other')[0] === 400
+            && $request('/api/air-quality-forecast.php?pollutant[]=PM10')[0] === 400
+            && $request('/api/air-quality-forecast.php?url=other')[0] === 400,
+            'air forecast API rejects invalid pollutant and arbitrary query parameters');
+        check($request('/api/air-quality-forecast.php', 'POST')[0] === 405
+            && $request('/assets/js/air-quality.js')[0] === 200, 'air forecast API method and frontend module');
         [$status, $type, $body] = $request('/comparison.php');
         check($status === 200 && strpos($body, 'data-api="/api/comparison.php"') !== false, 'comparison page and api wired');
         check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');

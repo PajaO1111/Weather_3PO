@@ -56,6 +56,11 @@ final class ChmiGateway
             'ttl' => 900,
             'maxBytes' => 250000,
         ],
+        'air_forecast_index' => [
+            'path' => '/air_quality/now/forecast/',
+            'ttl' => 900,
+            'maxBytes' => 150000,
+        ],
         'value_types' => [
             'path' => '/air_quality/now/metadata/ValueType.csv',
             'ttl' => 2592000,
@@ -209,6 +214,7 @@ final class ChmiGateway
             if (@file_put_contents($temporary, $data, LOCK_EX) !== false
                 && @rename($temporary, $this->cacheFile($resource))) {
                 $this->pruneRadarFrames($resource);
+                $this->pruneAirForecastArchives($resource);
                 return;
             }
 
@@ -236,6 +242,24 @@ final class ChmiGateway
         }
     }
 
+    private function pruneAirForecastArchives(string $resource): void
+    {
+        if ($this->cacheDirectory === null
+            || !preg_match('/^air_forecast_archive_(PM10|PM2_5|NO2|O3|SO2)_h_\d{2}$/D', $resource, $match)) {
+            return;
+        }
+        $files = glob($this->cacheDirectory . DIRECTORY_SEPARATOR . 'air_forecast_archive_' . $match[1] . '_h_*.json') ?: [];
+        usort($files, static function (string $left, string $right): int {
+            return (int) @filemtime($right) <=> (int) @filemtime($left);
+        });
+        foreach (array_slice($files, 3) as $file) {
+            if (preg_match('/^air_forecast_archive_(PM10|PM2_5|NO2|O3|SO2)_h_\d{2}\.json$/D', basename($file))
+                && !@unlink($file)) {
+                error_log('OuBrix Weather ČHMÚ gateway: starou cache předpovědi ovzduší nelze odstranit.');
+            }
+        }
+    }
+
     /**
      * Pevné HTTPS adresy a odvozené radarové názvy brání použití klienta jako proxy.
      */
@@ -248,7 +272,7 @@ final class ChmiGateway
                 'ignore_errors' => true,
                 'follow_location' => 0,
                 'max_redirects' => 0,
-                'header' => "Accept: application/json, application/xml, image/png, text/html, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
+                'header' => "Accept: application/json, application/zip, application/xml, image/png, text/html, text/csv;q=0.9\r\nUser-Agent: OuBrixWeather/1.0\r\n",
             ],
             'ssl' => [
                 'verify_peer' => true,
@@ -318,6 +342,14 @@ final class ChmiGateway
             ];
             $resources['radar_legend_' . $product] = [
                 'path' => RadarProduct::ROOT . $definition['legend'], 'ttl' => 2592000, 'maxBytes' => 100000,
+            ];
+        }
+        if ($requested !== null && preg_match('/^air_forecast_archive_(PM10|PM2_5|NO2|O3|SO2)_h_(\d{2})$/D', $requested, $match)
+            && (int) $match[2] <= 23) {
+            $resources[$requested] = [
+                'path' => '/air_quality/now/forecast/airquality_FC-boxplots_ORP_' . $match[1] . '_h_' . $match[2] . '.zip',
+                'ttl' => 900,
+                'maxBytes' => 2500000,
             ];
         }
         if ($requested !== null && preg_match('/^radar_frame_(maxz|merge)_(\d{12})$/D', $requested, $match)) {

@@ -38,7 +38,8 @@ Prohlížeč ──GET──► public/index.php, history.php, stats.php, analyt
                   public/api/history.php ─────┤
                   public/api/stats.php ───────┤
                   public/api/analytics.php ───┤
-                  public/api/air-quality.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
+                  public/api/air-quality.php ─┤
+                  public/api/air-quality-forecast.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
                                                ─► app/Weather/Services (logika)
                                                ─► app/Weather/Repositories (SQL)
                                                ─► app/Infrastructure/Database (PDO) ─► původní config.php + DB
@@ -79,6 +80,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │       ├── Services/StatsService.php                statistiky po měsících/letech, žebříčky rekordů
 │       ├── Services/AnalyticsService.php            naměřené srážky za 30/60/90 dní a úplnost dat
 │   ├── Services/AirQualityService.php           normalizace ovzduší, kvality hodnot a metadat ČHMÚ
+│   ├── Services/AirQualityForecastService.php   boxplotová předpověď ovzduší pro ORP Most
 │   ├── Gateways/ChmiGateway.php                 allowlist HTTPS zdrojů ČHMÚ, limity, timeout a cache
 │       ├── Services/WindRoseService.php             větrná růžice (16 směrů × třídy rychlosti)
 │       ├── Support/Meteo.php                        směr větru, pocitová teplota, UV, tendence, Beaufort, odhad stavu
@@ -97,6 +99,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── stats.php                 statistiky a rekordy za rok / celé období (JSON)
 │   │   ├── analytics.php             naměřené srážky a úplnost dat (JSON)
 │   │   ├── air-quality.php            aktuální kvalita ovzduší ČHMÚ pro UMOM (JSON)
+│   │   ├── air-quality-forecast.php   modelová hodinová předpověď pro ORP Most (JSON)
 │   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
@@ -108,7 +111,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │           ├── history.js            stránka „Historie“: období, souhrn, 6 propojených grafů, tabulka
 │           ├── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
 │           ├── analytics.js          stránka „Analytika“: srážky, období a úplnost dat
-│           ├── air-quality.js        stránka „Ovzduší ČHMÚ“: validované hodinové hodnoty UMOM
+│           ├── air-quality.js        stránka „Ovzduší ČHMÚ“: měření UMOM a předpovědní graf
 │           └── week.js               paprskový graf 7 dní (24 h × den) a větrná růžice
 ├── resources/views/
 │   ├── layouts/main.php              HTML kostra, knihovny
@@ -629,6 +632,30 @@ Při chybě zápisu se zobrazí varování. Uchovávají se pouze hodnoty, kter�
 aplikace skutečně načetla při požadavku na API; nejde o průběžný sběr CRONem
 ani o automatické doplnění starší historie ČHMÚ. Pokud žádná platná hodnota
 ještě nebyla zachycena, zůstává koncentrace nedostupná.
+
+### `api/air-quality-forecast.php?pollutant=PM10`
+
+Modelová hodinová předpověď ČHMÚ pro ORP Most, samostatná od měření UMOM.
+`pollutant` přijímá pouze `PM10`, `PM2_5`, `NO2`, `O3` nebo `SO2` (výchozí
+`PM10`). API načítá index publikovaných ZIPů a kontroluje tři nejnověji
+publikované archivy; vybraný běh určuje nejvyšší `datumVytvoreni` uvnitř jejich
+JSONů, nikoli číslo hodinového slotu v názvu ZIPu. V JSONu se ověřuje ORP kód
+892 (`CZ-RUIAN-ORP`), hodinové intervaly, hodnoty a pořadí percentilů.
+
+Odpověď obsahuje `area`, `pollutant`, samostatný volitelný `currentMap`
+(záznam typu `mapa`), hodinové `items` typu `predpoved` a `meta` s časem
+vydání, stářím, zdrojem, cache a upozorněními. Graf kreslí P50 a volitelné
+pásmo P25–P75; minimum a maximum jsou dostupné v popisku. Časy jsou převedeny
+z UTC do Europe/Prague. Oficiální schéma neuvádí jednotku ani podrobnosti
+statistického vzorku, proto API vrací `pollutant.unit: null`; pásmo se
+neprezentuje jako pravděpodobnostní interval.
+
+Přístup k ZIPům je přes pevný allowlist gateway. Archiv se neextrahuje;
+kontroluje se velikost ZIPu (2,5 MB), počet položek (250), celková
+rozbalená velikost (8 MB) a cílový JSON (150 KB). Hosting musí mít povolené
+PHP rozšíření `ZipArchive`, jinak endpoint vrací 503. Index i archivy mají
+15minutovou cache; zastaralá data jsou označena, nedostupný nebo neplatný
+zdroj nevrací prázdnou úspěšnou předpověď.
 
 ### `api/comparison.php`
 
