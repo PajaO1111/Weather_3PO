@@ -12,10 +12,49 @@ use OuBrix\Weather\Http\View;
         <span class="badge text-bg-secondary" id="air-quality-station">Most · UMOM</span>
         <span class="text-body-secondary small" id="air-quality-location"></span>
     </section>
+    <div class="nav nav-tabs mb-3" role="tablist" aria-label="Sekce kvality ovzduší">
+        <button class="nav-link active" id="air-quality-live-tab" type="button" role="tab"
+                aria-selected="true" aria-controls="air-quality-live-panel" tabindex="0">
+            Měření a předpověď
+        </button>
+        <button class="nav-link" id="air-quality-history-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="air-quality-history-panel" tabindex="-1">
+            Historie SVRS
+        </button>
+    </div>
+    <div id="air-quality-live-panel" role="tabpanel" aria-labelledby="air-quality-live-tab" tabindex="0">
 
     <div class="alert alert-danger d-none" id="air-quality-error" role="alert"></div>
     <div class="alert alert-warning d-none" id="air-quality-warning" role="status"></div>
-    <p class="text-body-secondary small d-none" id="air-quality-loading" role="status">Načítám data ČHMÚ…</p>
+    <p class="text-body-secondary small d-none" id="air-quality-loading" role="status">Načítám data ČHMÚ…    </p>
+
+    <section class="card mb-3" aria-labelledby="air-quality-comparison-title">
+        <div class="card-body">
+            <h2 class="h5" id="air-quality-comparison-title">Srovnání s blízkou stanicí ČHMÚ</h2>
+            <p class="small text-body-secondary">
+                Zobrazí se jen společně měřené látky se stejnou jednotkou a intervalem. Rozdíl
+                se počítá pouze při shodném čase měření; nejde o korekci polohy ani hodnocení
+                reprezentativnosti stanic.
+            </p>
+            <label class="form-label" for="air-quality-comparison-station">Srovnávací stanice</label>
+            <select class="form-select mb-3" id="air-quality-comparison-station" disabled>
+                <option value="">Načítám blízké stanice…</option>
+            </select>
+            <p class="small text-body-secondary" id="air-quality-comparison-status" aria-live="polite"></p>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle mb-0">
+                    <caption>Hodnoty jsou v uvedených časech; rozdíl je UMOM minus zvolená stanice.</caption>
+                    <thead><tr>
+                        <th scope="col">Látka</th>
+                        <th scope="col">UMOM</th>
+                        <th scope="col">Srovnávací stanice</th>
+                        <th scope="col">Rozdíl</th>
+                    </tr></thead>
+                    <tbody id="air-quality-comparison-rows"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
 
     <p class="text-body-secondary">
         Hodinová měření stanice ČHMÚ Most (UMOM). Zobrazují se pouze hodnoty s ověřeným
@@ -171,6 +210,55 @@ use OuBrix\Weather\Http\View;
                 doporučení WHO pro kvalitu ovzduší
             </a>.
             Obrazové srovnání velikosti částic nebylo převzato, protože nebyla ověřena licence.
+        </p>
+    </section>
+    </div>
+    <section id="air-quality-history-panel" role="tabpanel" aria-labelledby="air-quality-history-tab"
+             tabindex="0" hidden data-api="<?= View::e($baseUrl) ?>/api/air-quality-history.php">
+        <h2 class="h5">Historická vyhlášení SVRS – Ústecký kraj</h2>
+        <p class="text-body-secondary">
+            Jde o úřední vyhlášení pro kraj, nikoli o záznam lokální koncentrace nebo současnou
+            výstrahu CAP. Smogová situace, regulace a varování jsou samostatné události; jejich
+            časové překryvy se nesčítají jako nezávislé případy.
+        </p>
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-sm-4">
+                <label class="form-label" for="air-quality-history-year">Rok</label>
+                <select class="form-select" id="air-quality-history-year"><option value="">Všechny roky</option></select>
+            </div>
+            <div class="col-12 col-sm-4">
+                <label class="form-label" for="air-quality-history-pollutant">Látka</label>
+                <select class="form-select" id="air-quality-history-pollutant">
+                    <option value="">Všechny látky</option>
+                    <option value="PM10">PM10</option><option value="O3">O₃</option>
+                    <option value="SO2">SO₂</option><option value="NO2">NO₂</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-4">
+                <label class="form-label" for="air-quality-history-type">Typ události</label>
+                <select class="form-select" id="air-quality-history-type">
+                    <option value="">Všechny typy</option>
+                    <option value="smogová situace">Smogová situace</option>
+                    <option value="regulace">Regulace</option>
+                    <option value="varování">Varování</option>
+                </select>
+            </div>
+        </div>
+        <div class="alert alert-danger d-none" id="air-quality-history-error" role="alert"></div>
+        <div class="alert alert-warning d-none" id="air-quality-history-warning" role="status"></div>
+        <p class="small text-body-secondary" id="air-quality-history-source"></p>
+        <p class="small" id="air-quality-history-count" aria-live="polite"></p>
+        <ol class="svrs-timeline" id="air-quality-history-events"></ol>
+        <p class="small text-body-secondary">
+            Zdroj: <a href="https://opendata.chmi.cz/air_quality/historical/smog/historicky_prehled_smogovych_situaci.csv"
+                      target="_blank" rel="noopener noreferrer">historický přehled ČHMÚ (CSV)</a>,
+            licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
+                       rel="noopener noreferrer">CC BY 4.0</a>;
+            <a href="https://ovzdusi.chmi.cz/SVRS/historie.php" target="_blank" rel="noopener noreferrer">
+                metodika a právní změny SVRS
+            </a>.
+            Podle ČHMÚ se pravidla měnila v letech 2012, 2017 a 2025; události z různých období
+            proto nelze bez další metodiky považovat za přímo srovnatelné.
         </p>
     </section>
 </div>

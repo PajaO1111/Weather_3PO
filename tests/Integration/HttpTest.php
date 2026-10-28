@@ -22,6 +22,8 @@ return static function (): int {
     RadarFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/AirQualityForecastFixtures.php';
     AirQualityForecastFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/AirQualityHistoryFixtures.php';
+    AirQualityHistoryFixtures::cache($cache);
     $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
@@ -127,7 +129,21 @@ return static function (): int {
             && strpos($body, 'Jak číst zobrazená data') !== false
             && stripos($body, 'jednotka v metadatech předpovědi není uvedena') !== false,
             'air quality page explains forecast and source limitations');
+        check(strpos($body, 'air-quality-comparison-station') !== false
+            && strpos($body, 'air-quality-history-tab') !== false
+            && strpos($body, 'air-quality-history-events') !== false, 'air page provides nearby station comparison and SVRS history tab');
         check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
+        check($request('/api/air-quality.php?compare[]=LIT')[0] === 400
+            && $request('/api/air-quality.php?url=other')[0] === 400, 'air quality API rejects malformed comparison selectors and arbitrary parameters');
+        [$status, $type, $body] = $request('/api/air-quality-history.php');
+        $svrs = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $svrs['area'] === 'Ústecký kraj' && count($svrs['events']) === 3,
+            'SVRS history API returns filtered area events');
+        check($svrs['meta']['source']['license'] === 'CC BY 4.0'
+            && $request('/api/air-quality-history.php?year=2025')[0] === 400
+            && $request('/api/air-quality-history.php', 'POST')[0] === 405,
+            'SVRS API attributes source and rejects unsupported queries or methods');
         [$status, $type, $body] = $request('/api/air-quality-forecast.php?pollutant=PM10');
         $airForecast = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0
@@ -242,7 +258,7 @@ return static function (): int {
         ], JSON_THROW_ON_ERROR));
         [$status, , $body] = $request('/api/radar.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
-        return 76;
+        return 80;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

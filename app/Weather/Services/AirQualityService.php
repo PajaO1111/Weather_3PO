@@ -43,7 +43,7 @@ final class AirQualityService
     /**
      * @return array<string, mixed>
      */
-    public function build(): array
+    public function build(?string $comparisonStationCode = null): array
     {
         $metadataSource = $this->gateway->fetch('air_metadata');
         $valuesSource = $this->gateway->fetch('air_values');
@@ -66,7 +66,8 @@ final class AirQualityService
             throw new RuntimeException('Odpověď ČHMÚ nemá očekávaný formát.', 0, $exception);
         }
 
-        $locality = $this->findMost($metadata['data']['Localities']);
+        $localities = $metadata['data']['Localities'];
+        $locality = $this->findMost($localities);
         if ($locality === null) {
             throw new RuntimeException('Aktivní stanice kvality ovzduší UMOM nebyla v metadatech nalezena.');
         }
@@ -109,39 +110,48 @@ final class AirQualityService
             $indexLevels
         );
 
+        $warnings = [];
+        $nearbyStations = $this->nearbyStations($localities, $locality, $registrations);
+        if ($comparisonStationCode === null && $nearbyStations !== []) {
+            $comparisonStationCode = $nearbyStations[0]['code'];
+        }
+        $comparison = null;
+        if ($comparisonStationCode !== null) {
+            $candidate = null;
+            foreach ($nearbyStations as $nearby) {
+                if ($nearby['code'] === $comparisonStationCode) {
+                    $candidate = $nearby;
+                    break;
+                }
+            }
+            if ($candidate === null) {
+                throw new \InvalidArgumentException('Zvolená srovnávací stanice není mezi blízkými aktivními stanicemi ČHMÚ.');
+            }
+            $candidateRegistrations = $candidate['registrations'];
+            $candidateObservations = $this->observationsFor($candidateRegistrations, $rows);
+            $candidateMeasurements = $this->measurementsFor($candidateRegistrations, $candidateObservations, $valueTypes);
+            $this->applyLastValid($candidateMeasurements, $candidate['code'], $warnings);
+            foreach ($candidateMeasurements as &$candidateMeasurement) {
+                $candidateMeasurement['ageSeconds'] = $candidateMeasurement['observedAt'] === null
+                    ? null
+                    : max(0, $this->now->getTimestamp() - strtotime($candidateMeasurement['observedAt']));
+            }
+            unset($candidateMeasurement);
+            $comparison = [
+                'station' => $this->stationDetails($candidate['locality']),
+                'distanceKm' => $candidate['distanceKm'],
+                'measurements' => $candidateMeasurements,
+                'pollutants' => $this->compareMeasurements($measurements, $candidateMeasurements),
+            ];
+        }
+
         $sources = [
             'metadata' => $metadataSource,
             'values' => $valuesSource,
             'valueTypes' => $typesSource,
             'indexLevels' => $indexSource,
         ];
-        $warnings = [];
-        if ($this->lastValid !== null) {
-            try {
-                $saved = $this->lastValid->merge($measurements);
-                foreach ($measurements as $component => &$measurement) {
-                    if (isset($saved[$component])
-                        && ($measurement['value'] === null || $saved[$component]['observedAt'] > $measurement['observedAt'])
-                        && in_array($measurement['status'], ['available', 'substituted', 'invalid', 'no_data'], true)) {
-                        $reason = $measurement['value'] === null
-                            ? $measurement['statusText']
-                            : 'Dostupný snímek obsahuje starší měření než uložená hodnota.';
-                        $latestStatus = $measurement['status'];
-                        $latestObservedAt = $measurement['observedAt'];
-                        $measurement = $saved[$component];
-                        $measurement['status'] = 'last_valid';
-                        $measurement['statusText'] = 'Poslední platná hodnota. ' . $reason;
-                        $measurement['latestStatus'] = $latestStatus;
-                        $measurement['latestObservedAt'] = $latestObservedAt;
-                        $measurement['stale'] = true;
-                    }
-                }
-                unset($measurement);
-            } catch (RuntimeException $exception) {
-                error_log('OuBrix Weather poslední platné měření: ' . $exception->getMessage());
-                $warnings[] = 'Úložiště posledních platných hodnot není dostupné. Uchování hodnot při výpadku nelze zaručit.';
-            }
-        }
+        $this->applyLastValid($measurements, 'UMOM', $warnings);
         foreach ($measurements as &$measurement) {
             $measurement['ageSeconds'] = $measurement['observedAt'] === null
                 ? null
@@ -172,17 +182,16 @@ final class AirQualityService
         $ageSeconds = $lastObservation === null ? null : max(0, $this->now->getTimestamp() - strtotime($lastObservation));
 
         return [
-            'station' => [
-                'code' => 'UMOM',
-                'name' => (string) ($locality['Name'] ?? 'Most'),
-                'active' => true,
-                'region' => (string) ($locality['BasicInfo']['Region'] ?? ''),
-                'district' => (string) ($locality['BasicInfo']['District'] ?? ''),
-                'latitude' => $this->numberOrNull($locality['Localization']['LatAsNumber'] ?? null),
-                'longitude' => $this->numberOrNull($locality['Localization']['LonAsNumber'] ?? null),
-                'elevationMeters' => $this->numberOrNull($locality['Localization']['Alt'] ?? null),
-            ],
+            'station' => $this->stationDetails($locality),
             'measurements' => $measurements,
+            'nearbyStations' => array_map(static function (array $candidate): array {
+                return [
+                    'code' => $candidate['code'],
+                    'name' => (string) ($candidate['locality']['Name'] ?? $candidate['code']),
+                    'distanceKm' => $candidate['distanceKm'],
+                ];
+            }, $nearbyStations),
+            'comparison' => $comparison,
             'index' => $index,
             'meta' => [
                 'generatedAt' => $this->now->format('Y-m-d\TH:i:s\Z'),
@@ -208,15 +217,211 @@ final class AirQualityService
      */
     private function findMost(array $localities): ?array
     {
+        return $this->findLocality($localities, 'UMOM');
+    }
+
+    /**
+     * @param array<int, mixed> $localities
+     * @return array<string, mixed>|null
+     */
+    private function findLocality(array $localities, string $code): ?array
+    {
         foreach ($localities as $locality) {
-            if (is_array($locality) && isset($locality['LocalityCode']) && $locality['LocalityCode'] === 'UMOM') {
+            if (is_array($locality) && isset($locality['LocalityCode']) && $locality['LocalityCode'] === $code) {
                 if (!$this->isAffirmative($locality['Active'] ?? false)) {
-                    throw new RuntimeException('Stanice kvality ovzduší UMOM není v metadatech aktivní.');
+                    throw new RuntimeException('Zvolená stanice kvality ovzduší není v metadatech aktivní.');
                 }
                 return $locality;
             }
         }
         return null;
+    }
+
+    /**
+     * @param array<int, mixed> $localities
+     * @param array<string, mixed> $anchor
+     * @param array<string, mixed> $anchorRegistrations
+     * @return list<array{code:string,locality:array<string,mixed>,registrations:array<string,mixed>,distanceKm:float}>
+     */
+    private function nearbyStations(array $localities, array $anchor, array $anchorRegistrations): array
+    {
+        $anchorLat = $this->numberOrNull($anchor['Localization']['LatAsNumber'] ?? null);
+        $anchorLon = $this->numberOrNull($anchor['Localization']['LonAsNumber'] ?? null);
+        if ($anchorLat === null || $anchorLon === null) {
+            return [];
+        }
+        $candidates = [];
+        foreach ($localities as $locality) {
+            if (!is_array($locality) || !$this->isAffirmative($locality['Active'] ?? false)) {
+                continue;
+            }
+            $code = isset($locality['LocalityCode']) ? (string) $locality['LocalityCode'] : '';
+            if ($code === '' || $code === 'UMOM' || preg_match('/^[A-Z0-9_-]{1,16}$/D', $code) !== 1) {
+                continue;
+            }
+            $latitude = $this->numberOrNull($locality['Localization']['LatAsNumber'] ?? null);
+            $longitude = $this->numberOrNull($locality['Localization']['LonAsNumber'] ?? null);
+            if ($latitude === null || $longitude === null) {
+                continue;
+            }
+            $distance = $this->distanceKm($anchorLat, $anchorLon, $latitude, $longitude);
+            if ($distance > 75) {
+                continue;
+            }
+            $registrations = $this->findRegistrations($locality);
+            $compatible = false;
+            foreach (self::POLLUTANTS as $component => $_label) {
+                $base = $anchorRegistrations['byComponent'][$component] ?? null;
+                $other = $registrations['byComponent'][$component] ?? null;
+                if ($base !== null && $other !== null && $base['hasRealTimeData'] && $other['hasRealTimeData']
+                    && $base['interval'] !== '' && $base['interval'] === $other['interval']
+                    && $this->normalizeUnit($base['unit']) !== null
+                    && $this->normalizeUnit($base['unit']) === $this->normalizeUnit($other['unit'])) {
+                    $compatible = true;
+                    break;
+                }
+            }
+            if ($compatible) {
+                $candidates[] = ['code' => $code, 'locality' => $locality,
+                    'registrations' => $registrations, 'distanceKm' => round($distance, 1)];
+            }
+        }
+        usort($candidates, static function (array $left, array $right): int {
+            return $left['distanceKm'] <=> $right['distanceKm']
+                ?: strcasecmp((string) ($left['locality']['Name'] ?? ''), (string) ($right['locality']['Name'] ?? ''));
+        });
+        return array_slice($candidates, 0, 12);
+    }
+
+    private function distanceKm(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lonDelta = deg2rad($lon2 - $lon1);
+        $a = sin($latDelta / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) ** 2;
+        return 6371 * 2 * asin(min(1, sqrt($a)));
+    }
+
+    /** @param array<string, mixed> $locality */
+    private function stationDetails(array $locality): array
+    {
+        return [
+            'code' => (string) ($locality['LocalityCode'] ?? ''),
+            'name' => (string) ($locality['Name'] ?? ''),
+            'active' => $this->isAffirmative($locality['Active'] ?? false),
+            'region' => (string) ($locality['BasicInfo']['Region'] ?? ''),
+            'district' => (string) ($locality['BasicInfo']['District'] ?? ''),
+            'latitude' => $this->numberOrNull($locality['Localization']['LatAsNumber'] ?? null),
+            'longitude' => $this->numberOrNull($locality['Localization']['LonAsNumber'] ?? null),
+            'elevationMeters' => $this->numberOrNull($locality['Localization']['Alt'] ?? null),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $registrations
+     * @param list<array{idRegistration:int,timestamp:string,idValueType:int,value:float}> $rows
+     * @return array<string, array<string, mixed>>
+     */
+    private function observationsFor(array $registrations, array $rows): array
+    {
+        $observations = [];
+        foreach ($rows as $row) {
+            $registration = (string) $row['idRegistration'];
+            if (isset($registrations['byId'][$registration])
+                && (!isset($observations[$registration]) || $row['timestamp'] > $observations[$registration]['timestamp'])) {
+                $observations[$registration] = $row;
+            }
+        }
+        return $observations;
+    }
+
+    /**
+     * @param array<string, mixed> $registrations
+     * @param array<string, array<string, mixed>> $observations
+     * @param array<int, string> $valueTypes
+     * @return array<string, array<string, mixed>>
+     */
+    private function measurementsFor(array $registrations, array $observations, array $valueTypes): array
+    {
+        $measurements = [];
+        foreach (self::POLLUTANTS as $component => $label) {
+            $registration = $registrations['byComponent'][$component] ?? null;
+            $measurements[$component] = $this->measurement(
+                $component,
+                $label,
+                $registration,
+                $registration !== null ? ($observations[$registration['id']] ?? null) : null,
+                $valueTypes
+            );
+        }
+        return $measurements;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $measurements
+     * @param list<string> $warnings
+     */
+    private function applyLastValid(array &$measurements, string $localityCode, array &$warnings): void
+    {
+        if ($this->lastValid === null) {
+            return;
+        }
+        try {
+            $saved = $this->lastValid->merge($measurements, $localityCode);
+            foreach ($measurements as $component => &$measurement) {
+                if (isset($saved[$component])
+                    && ($measurement['value'] === null || $saved[$component]['observedAt'] > $measurement['observedAt'])
+                    && in_array($measurement['status'], ['available', 'substituted', 'invalid', 'no_data'], true)) {
+                    $reason = $measurement['value'] === null
+                        ? $measurement['statusText']
+                        : 'Dostupný snímek obsahuje starší měření než uložená hodnota.';
+                    $latestStatus = $measurement['status'];
+                    $latestObservedAt = $measurement['observedAt'];
+                    $measurement = $saved[$component];
+                    $measurement['status'] = 'last_valid';
+                    $measurement['statusText'] = 'Poslední platná hodnota. ' . $reason;
+                    $measurement['latestStatus'] = $latestStatus;
+                    $measurement['latestObservedAt'] = $latestObservedAt;
+                    $measurement['stale'] = true;
+                }
+            }
+            unset($measurement);
+        } catch (RuntimeException $exception) {
+            error_log('OuBrix Weather poslední platné měření: ' . $exception->getMessage());
+            $warnings[] = 'Úložiště posledních platných hodnot není dostupné. Uchování hodnot při výpadku nelze zaručit.';
+        }
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $base
+     * @param array<string, array<string, mixed>> $other
+     * @return array<string, array{status:string,difference:float|null}>
+     */
+    private function compareMeasurements(array $base, array $other): array
+    {
+        $comparisons = [];
+        foreach (self::POLLUTANTS as $component => $_label) {
+            $left = $base[$component];
+            $right = $other[$component];
+            $status = 'unavailable';
+            $difference = null;
+            if ($left['value'] === null || $right['value'] === null
+                || !in_array($left['status'], ['available', 'substituted'], true)
+                || !in_array($right['status'], ['available', 'substituted'], true)
+                || $left['stale'] || $right['stale']) {
+                $status = 'unavailable';
+            } elseif ($left['unit'] !== $right['unit']) {
+                $status = 'unit_mismatch';
+            } elseif ($left['interval'] === null || $left['interval'] !== $right['interval']) {
+                $status = 'interval_mismatch';
+            } elseif ($left['observedAt'] !== $right['observedAt']) {
+                $status = 'time_mismatch';
+            } else {
+                $status = 'comparable';
+                $difference = $left['value'] - $right['value'];
+            }
+            $comparisons[$component] = ['status' => $status, 'difference' => $difference];
+        }
+        return $comparisons;
     }
 
     /**

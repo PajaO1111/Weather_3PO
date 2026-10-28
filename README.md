@@ -7,8 +7,8 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 
 > Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
-> stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
-> a cache s viditelným stavem zastaralosti. Stránka historického Klima Kopisty
+> stránku kvality ovzduší s měřením Most (UMOM), srovnáním okolní stanice,
+> předpovědí a historií SVRS Ústeckého kraje (fáze 9C). Stránka historického Klima Kopisty
 > nyní odděluje oficiální normály ČHMÚ 1991–2020 od vlastního výpočtu z archivu.
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
@@ -39,6 +39,7 @@ Prohlížeč ──GET──► public/index.php, history.php, stats.php, analyt
                   public/api/stats.php ───────┤
                   public/api/analytics.php ───┤
                   public/api/air-quality.php ─┤
+                  public/api/air-quality-history.php ─┤
                   public/api/air-quality-forecast.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
                                                ─► app/Weather/Services (logika)
                                                ─► app/Weather/Repositories (SQL)
@@ -80,6 +81,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │       ├── Services/StatsService.php                statistiky po měsících/letech, žebříčky rekordů
 │       ├── Services/AnalyticsService.php            naměřené srážky za 30/60/90 dní a úplnost dat
 │   ├── Services/AirQualityService.php           normalizace ovzduší, kvality hodnot a metadat ČHMÚ
+│   ├── Services/AirQualityHistoryService.php    validace a časová osa úředních událostí SVRS
 │   ├── Services/AirQualityForecastService.php   boxplotová předpověď ovzduší pro ORP Most
 │   ├── Gateways/ChmiGateway.php                 allowlist HTTPS zdrojů ČHMÚ, limity, timeout a cache
 │       ├── Services/WindRoseService.php             větrná růžice (16 směrů × třídy rychlosti)
@@ -90,7 +92,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   ├── history.php                   stránka „Historie“
 │   ├── stats.php                     stránka „Statistiky a rekordy“
 │   ├── analytics.php                 stránka „Analytika“ (srážky za 30/60/90 dní)
-│   ├── air-quality.php             stránka kvality ovzduší ČHMÚ (Most / UMOM)
+│   ├── air-quality.php             kvalita ovzduší, srovnání stanic a historie SVRS
 │   ├── api/
 │   │   ├── health.php                diagnostika nasazení (PHP, config, DB)
 │   │   ├── current.php               aktuální stav stanice (JSON)
@@ -98,7 +100,8 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── history.php               měření za zvolené období (JSON / CSV)
 │   │   ├── stats.php                 statistiky a rekordy za rok / celé období (JSON)
 │   │   ├── analytics.php             naměřené srážky a úplnost dat (JSON)
-│   │   ├── air-quality.php            aktuální kvalita ovzduší ČHMÚ pro UMOM (JSON)
+│   │   ├── air-quality.php            měření UMOM + srovnatelná blízká stanice (JSON)
+│   │   ├── air-quality-history.php    historická SVRS data pro Ústecký kraj (JSON)
 │   │   ├── air-quality-forecast.php   modelová hodinová předpověď pro ORP Most (JSON)
 │   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
 │   └── assets/
@@ -111,7 +114,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │           ├── history.js            stránka „Historie“: období, souhrn, 6 propojených grafů, tabulka
 │           ├── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
 │           ├── analytics.js          stránka „Analytika“: srážky, období a úplnost dat
-│           ├── air-quality.js        stránka „Ovzduší ČHMÚ“: měření UMOM a předpovědní graf
+│           ├── air-quality.js        měření, srovnání, předpověď a SVRS historie
 │           └── week.js               paprskový graf 7 dní (24 h × den) a větrná růžice
 ├── resources/views/
 │   ├── layouts/main.php              HTML kostra, knihovny
@@ -620,10 +623,12 @@ Metadata se ukládají na 24 hodin, hodinová data na 15 minut a číselníky na
 zobrazit poslední cache s viditelným varováním a časem načtení; bez cache API
 vrátí `503 CHMI_UNAVAILABLE`, nikoli prázdnou „úspěšnou“ odpověď. Současný
 datový soubor je snímek, nikoli ověřená 24hodinová či sedmidenní časová řada;
-graf historie proto zatím není součástí stránky.
+historie koncentrací proto není součástí stránky. Historie SVRS je oddělený
+záznam úředních vyhlášení, nikoli měření koncentrací.
 
-Pro každou látku UMOM se navíc samostatně uchovává poslední platná koncentrace
-v `storage/cache/chmi/air_last_valid_umom.json`. Chybový kód ani chybějící
+Pro každou lokalitu a látku se navíc samostatně uchovává poslední platná koncentrace
+v `storage/cache/chmi/air_last_valid_<lokalita>.json` (například `air_last_valid_umom.json`).
+Chybový kód ani chybějící
 řádek nového CSV tuto hodnotu nepřepíše. API v takovém případě vrací
 `status: last_valid`, původní čas a typ hodnoty, `ageSeconds` a důvod
 nedostupnosti nového měření. Stránka pod hodnotou uvádí, že není aktuální,
@@ -635,6 +640,29 @@ Při chybě zápisu se zobrazí varování. Uchovávají se pouze hodnoty, kter�
 aplikace skutečně načetla při požadavku na API; nejde o průběžný sběr CRONem
 ani o automatické doplnění starší historie ČHMÚ. Pokud žádná platná hodnota
 ještě nebyla zachycena, zůstává koncentrace nedostupná.
+
+Srovnávací seznam tvoří nejvýše 12 aktivních stanic do 75 km od UMOM, které
+podle aktuálních metadat sdílejí alespoň jednu real-time látku, jednotku
+a interval. Výběr je validován proti tomuto seznamu; poslední platné hodnoty
+se ukládají do odděleného souboru lokality a registrace. Rozdíl koncentrací
+se zobrazí jen pro stejnou látku, jednotku, interval a přesně shodný UTC čas.
+Rozdíl `UMOM − stanice` není korekcí místních vlivů ani důkazem reprezentativnosti.
+
+### `api/air-quality-history.php`
+
+Server načítá CSV [historického přehledu SVRS ČHMÚ](https://opendata.chmi.cz/air_quality/historical/smog/historicky_prehled_smogovych_situaci.csv)
+a vrací časovou osu jen pro oblast **Ústecký kraj**. Zdroj obsahuje typ události,
+látku, čas vyhlášení/odvolání, délku trvání a poznámku; explicitní časové offsety
+se normalizují do UTC, v prohlížeči se zobrazují v místním čase.
+Otevřená událost zůstává bez času odvolání. Překrývající se smogová situace,
+regulace a varování jsou jednotlivé záznamy a nesčítají se do počtu nezávislých
+událostí. Stránka nabízí filtry podle roku, látky a typu.
+
+CSV má 24hodinovou cache a je připisováno ČHMÚ pod licencí [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Při výpadku zdroje se případná stará cache viditelně označí. ČHMÚ upozorňuje,
+že pravidla SVRS se měnila (mimo jiné v letech 2012, 2017 a 2025), proto historické
+události napříč těmito obdobími nelze bez další metodiky považovat za přímo srovnatelné.
+Historická vyhlášení nejsou aktuálními CAP výstrahami ani místními koncentracemi.
 
 ### `api/air-quality-forecast.php?pollutant=PM10`
 

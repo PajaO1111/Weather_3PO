@@ -1,6 +1,6 @@
 <?php
 /**
- * Poslední platné koncentrace UMOM nezávislé na přepisovaném CSV snímku.
+ * Poslední platné koncentrace jednotlivých lokalit nezávislé na CSV snímku.
  */
 declare(strict_types=1);
 
@@ -24,12 +24,15 @@ final class AirQualityLastValidRepository
      * @param array<string, array<string, mixed>> $measurements
      * @return array<string, array<string, mixed>>
      */
-    public function merge(array $measurements): array
+    public function merge(array $measurements, string $localityCode = 'UMOM'): array
     {
+        if (preg_match('/^[A-Z0-9_-]{1,16}$/D', $localityCode) !== 1) {
+            throw new RuntimeException('Kód lokality pro poslední platná měření není platný.');
+        }
         if (!is_dir($this->directory) && !@mkdir($this->directory, 0750, true) && !is_dir($this->directory)) {
             throw new RuntimeException('Složku posledních platných měření nelze vytvořit.');
         }
-        $file = $this->directory . DIRECTORY_SEPARATOR . 'air_last_valid_umom.json';
+        $file = $this->directory . DIRECTORY_SEPARATOR . 'air_last_valid_' . strtolower($localityCode) . '.json';
         $handle = @fopen($file, 'c+b');
         if ($handle === false) {
             throw new RuntimeException('Úložiště posledních platných měření nelze otevřít.');

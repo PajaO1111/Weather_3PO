@@ -28,6 +28,18 @@ return static function (): int {
                         ['IdRegistration' => 1648760, 'ComponentCode' => 'INDX', 'UnitAsASCII' => '', 'Interval' => '1h', 'HasRealTimeData' => 'Ne', 'DateFrom' => '2019-01-01T00:00:00Z'],
                     ],
                 ]],
+            ], [
+                'LocalityCode' => 'LIT',
+                'Name' => 'Litvínov',
+                'Active' => true,
+                'BasicInfo' => ['Region' => 'Ústecký', 'District' => 'Most'],
+                'Localization' => ['LatAsNumber' => 50.604, 'LonAsNumber' => 13.609, 'Alt' => 300],
+                'MeasuringPrograms' => [[
+                    'Measurements' => [
+                        ['IdRegistration' => 50001, 'ComponentCode' => 'PM10', 'UnitAsASCII' => 'ug/m3', 'Interval' => '1h', 'HasRealTimeData' => 'Ano', 'DateFrom' => '2020-01-01T00:00:00Z'],
+                        ['IdRegistration' => 50002, 'ComponentCode' => 'NO2', 'UnitAsASCII' => 'ug/m3', 'Interval' => '30min', 'HasRealTimeData' => 'Ano', 'DateFrom' => '2020-01-01T00:00:00Z'],
+                    ],
+                ]],
             ]],
         ],
     ];
@@ -38,7 +50,9 @@ return static function (): int {
             . "40369, 2026-10-25T10:00:00Z, 6, -5009.0\n"
             . "40352, 2026-10-25T10:00:00Z, 9, 8.2\n"
             . "10221, 2026-10-25T10:00:00Z, 11, 1.4\n"
-            . "1648760, 2026-10-25T10:00:00Z, 148, 0\n",
+            . "1648760, 2026-10-25T10:00:00Z, 148, 0\n"
+            . "50001, 2026-10-25T10:00:00Z, 8, 20.5\n"
+            . "50002, 2026-10-25T10:00:00Z, 8, 4.2\n",
         'ValueType.csv' => "ID_VALUE_TYPE,NAME\n5,\"Vyřazeno pro nevěrohodnost\"\n6,\"Chybový kód operativních dat\"\n8,\"Operativní data\"\n9,\"Verifikovaná data\"\n11,\"Substituce pod limitem\"\n148,\"Index kvality ovzduší\"\n",
         'AirQualityIndex.csv' => "ID,Level,IndexRange,AirQuality\n1,1A,\"≥ 0.00 and < 0.34\",\"velmi dobrá až dobrá\"\n0,,\"Neúplná data\",\"Neúplná data\"\n",
     ];
@@ -64,6 +78,20 @@ return static function (): int {
         check($result['measurements']['O3']['value'] === null && $result['measurements']['O3']['status'] === 'no_data', 'missing pollutant row is not zero');
         check($result['index']['status'] === 'not_realtime' && $result['index']['value'] === null, 'do not invent a real-time air quality index');
         check($result['meta']['observationStale'] === false && $result['meta']['sourceVersion'] === '1.2', 'include freshness and metadata version');
+        check($result['nearbyStations'][0]['code'] === 'LIT'
+            && $result['comparison']['station']['code'] === 'LIT'
+            && $result['comparison']['pollutants']['PM10']['status'] === 'comparable'
+            && $result['comparison']['pollutants']['PM10']['difference'] === -8.0,
+            'offer nearest compatible station and compare same-time pollutant values only');
+        check($result['comparison']['pollutants']['NO2']['status'] === 'interval_mismatch',
+            'do not compare pollutants with different measurement intervals');
+        $invalidStation = false;
+        try {
+            $service->build('OUTSIDE');
+        } catch (InvalidArgumentException $exception) {
+            $invalidStation = true;
+        }
+        check($invalidStation, 'reject stations outside the nearby metadata allowlist');
 
         $service->build();
         check($calls === 4, 'cache each allowlisted resource while its TTL is valid');
@@ -114,6 +142,9 @@ return static function (): int {
         };
         $first = $buildSnapshot($now);
         check($first['measurements']['PM10']['value'] === 12.5, 'save first valid concentration');
+        check(is_file($lastDirectory . DIRECTORY_SEPARATOR . 'air_last_valid_umom.json')
+            && is_file($lastDirectory . DIRECTORY_SEPARATOR . 'air_last_valid_lit.json'),
+            'persist last-valid measurements in separate locality stores');
         $sequenceSources['airquality_1h_avg_CZ.csv'] = "idRegistration, startTime, idValueType, value\n"
             . "40356, 2026-10-25T11:00:00Z, 6, -5009.0\n"
             . "40369, 2026-10-25T11:00:00Z, 6, -5009.0\n";
@@ -149,7 +180,7 @@ return static function (): int {
         ))->build();
         check($warning['measurements']['PM10']['value'] === 12.5 && count($warning['meta']['warnings']) > 0,
             'storage failures keep live data usable and surface a warning');
-        return 24;
+        return 28;
     } finally {
         foreach ([$directory, $directory . '-empty', $directory . '-index', $directory . '-last'] as $path) {
             if (is_dir($path)) {

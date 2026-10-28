@@ -66,6 +66,11 @@ final class ChmiGateway
             'ttl' => 900,
             'maxBytes' => 250000,
         ],
+        'air_svrs_history' => [
+            'path' => '/air_quality/historical/smog/historicky_prehled_smogovych_situaci.csv',
+            'ttl' => 86400,
+            'maxBytes' => 250000,
+        ],
         'air_forecast_index' => [
             'path' => '/air_quality/now/forecast/',
             'ttl' => 900,

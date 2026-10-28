@@ -13,8 +13,27 @@ const ui = {
     index: document.getElementById('air-quality-index'),
     indexTime: document.getElementById('air-quality-index-time'),
     updated: document.getElementById('air-quality-updated'),
+    comparisonStation: document.getElementById('air-quality-comparison-station'),
+    comparisonStatus: document.getElementById('air-quality-comparison-status'),
+    comparisonRows: document.getElementById('air-quality-comparison-rows'),
 };
 let state = null;
+let currentRequest = 0;
+const historyPanel = document.getElementById('air-quality-history-panel');
+const historyUi = historyPanel ? {
+    error: document.getElementById('air-quality-history-error'),
+    warning: document.getElementById('air-quality-history-warning'),
+    source: document.getElementById('air-quality-history-source'),
+    count: document.getElementById('air-quality-history-count'),
+    events: document.getElementById('air-quality-history-events'),
+    year: document.getElementById('air-quality-history-year'),
+    pollutant: document.getElementById('air-quality-history-pollutant'),
+    type: document.getElementById('air-quality-history-type'),
+} : null;
+let historyPayload = null;
+let historyRequest = 0;
+const pollutantLabels = { PM10: 'PM10', O3: 'O₃', SO2: 'SO₂', NO2: 'NO₂' };
+const eventLabels = { 'smogová situace': 'Smogová situace', regulace: 'Regulace', varování: 'Varování' };
 const forecastRoot = document.getElementById('air-quality-forecast');
 const forecastUi = forecastRoot ? {
     pollutant: document.getElementById('air-quality-forecast-pollutant'),
@@ -56,6 +75,64 @@ function renderMeasurement(component, measurement) {
     card.classList.toggle('border-danger', measurement.status === 'invalid' || measurement.status === 'unavailable');
 }
 
+function renderComparison(payload) {
+    const stations = payload.nearbyStations || [];
+    const comparison = payload.comparison;
+    ui.comparisonStation.replaceChildren();
+    for (const station of stations) {
+        const option = document.createElement('option');
+        option.value = station.code;
+        option.textContent = `${station.name} (${formatNumber(station.distanceKm, 1)} km)`;
+        option.selected = Boolean(comparison && comparison.station.code === station.code);
+        ui.comparisonStation.append(option);
+    }
+    ui.comparisonStation.disabled = stations.length === 0;
+    if (stations.length === 0 || !comparison) {
+        ui.comparisonStatus.textContent = 'V okolí nebyla nalezena aktivní stanice se srovnatelnou látkou, jednotkou a intervalem.';
+        ui.comparisonRows.replaceChildren();
+        return;
+    }
+    ui.comparisonStatus.textContent = `${comparison.station.name} · ${comparison.station.region || 'region neuveden'} · `
+        + `${formatNumber(comparison.distanceKm, 1)} km od UMOM. Rozdíl jen při shodném čase měření.`;
+    ui.comparisonRows.replaceChildren();
+    for (const component of ['PM10', 'PM2_5', 'NO2', 'SO2', 'O3']) {
+        const left = payload.measurements[component];
+        const right = comparison.measurements[component];
+        const relation = comparison.pollutants[component];
+        const row = document.createElement('tr');
+        const values = [
+            left.label || pollutantLabels[component] || component,
+            measurementText(left),
+            measurementText(right),
+            relation.status === 'comparable'
+                ? formatNumber(relation.difference, 1)
+                : comparisonText(relation.status),
+        ];
+        for (const text of values) {
+            const cell = document.createElement('td');
+            cell.textContent = text;
+            row.append(cell);
+        }
+        ui.comparisonRows.append(row);
+    }
+}
+
+function measurementText(measurement) {
+    const value = measurement.value === null ? '–' : `${formatNumber(measurement.value, 1)} ${measurement.unit || ''}`;
+    const time = measurement.observedAt ? ` · ${formatTime(measurement.observedAt, 'datetime')}` : '';
+    const stale = measurement.stale ? ' · zastaralé' : '';
+    return `${value}${time}${stale}`;
+}
+
+function comparisonText(status) {
+    return ({
+        unavailable: 'Nedostupné',
+        unit_mismatch: 'Jiná jednotka',
+        interval_mismatch: 'Jiný interval',
+        time_mismatch: 'Jiný čas měření',
+    })[status] || 'Nesrovnatelné';
+}
+
 function render(payload) {
     state = payload;
     const station = payload.station || {};
@@ -70,6 +147,7 @@ function render(payload) {
     for (const component of ['PM10', 'PM2_5', 'NO2', 'SO2', 'O3']) {
         renderMeasurement(component, payload.measurements[component]);
     }
+    renderComparison(payload);
 
     const index = payload.index || {};
     ui.index.textContent = index.available
@@ -90,18 +168,138 @@ function render(payload) {
     }. Zdroj načten: ${formatTime(meta.sources.values.fetchedAt, 'datetime')}.`;
 }
 
-async function load() {
+async function load(comparisonCode = null) {
+    const requestId = ++currentRequest;
     root.setAttribute('aria-busy', 'true');
     ui.loading.classList.remove('d-none');
     setMessage(ui.error, '');
     try {
-        render(await fetchJson(root.dataset.apiAirQuality, 15000));
+        const url = comparisonCode
+            ? `${root.dataset.apiAirQuality}?compare=${encodeURIComponent(comparisonCode)}`
+            : root.dataset.apiAirQuality;
+        const payload = await fetchJson(url, 15000);
+        if (requestId === currentRequest) render(payload);
     } catch (error) {
-        setMessage(ui.error, error.message || 'Data kvality ovzduší se nepodařilo načíst.');
+        if (requestId === currentRequest) setMessage(ui.error, error.message || 'Data kvality ovzduší se nepodařilo načíst.');
     } finally {
-        root.setAttribute('aria-busy', 'false');
-        ui.loading.classList.add('d-none');
+        if (requestId === currentRequest) {
+            root.setAttribute('aria-busy', 'false');
+            ui.loading.classList.add('d-none');
+        }
     }
+}
+
+function renderHistory() {
+    if (!historyUi || !historyPayload) return;
+    const years = [...new Set(historyPayload.events.map(event => event.issuedAt.slice(0, 4)))].sort().reverse();
+    const selectedYear = historyUi.year.value;
+    historyUi.year.replaceChildren();
+    const allYears = document.createElement('option');
+    allYears.value = '';
+    allYears.textContent = 'Všechny roky';
+    historyUi.year.append(allYears);
+    for (const year of years) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        historyUi.year.append(option);
+    }
+    historyUi.year.value = years.includes(selectedYear) ? selectedYear : '';
+    const events = historyPayload.events.filter(event =>
+        (!historyUi.year.value || event.issuedAt.slice(0, 4) === historyUi.year.value)
+        && (!historyUi.pollutant.value || event.pollutant === historyUi.pollutant.value)
+        && (!historyUi.type.value || event.type === historyUi.type.value));
+    historyUi.events.replaceChildren();
+    historyUi.count.textContent = `${events.length} ${events.length === 1 ? 'událost' : 'událostí'} pro ${historyPayload.area}.`;
+    for (const event of events) {
+        const item = document.createElement('li');
+        const article = document.createElement('article');
+        article.classList.add('svrs-timeline-event');
+        const heading = document.createElement('h3');
+        heading.className = 'h6 mb-1';
+        heading.textContent = `${eventLabels[event.type] || event.type} · ${pollutantLabels[event.pollutant] || event.pollutant}`;
+        article.append(heading);
+        const period = document.createElement('p');
+        period.className = 'mb-1';
+        period.textContent = `Vyhlášení: ${formatTime(event.issuedAt, 'datetime')} · `
+            + `odvolání: ${event.endedAt ? formatTime(event.endedAt, 'datetime') : 'dosud neodvoláno'}`;
+        article.append(period);
+        const details = [];
+        if (event.durationHours !== null) details.push(`délka ${formatNumber(event.durationHours, 1)} h`);
+        if (event.note) details.push(event.note);
+        if (details.length) {
+            const note = document.createElement('p');
+            note.className = 'small text-body-secondary mb-0';
+            note.textContent = details.join(' · ');
+            article.append(note);
+        }
+        item.append(article);
+        historyUi.events.append(item);
+    }
+    if (events.length === 0) {
+        const empty = document.createElement('li');
+        empty.textContent = 'Pro zvolené filtry nebyla nalezena žádná událost.';
+        historyUi.events.append(empty);
+    }
+    const source = historyPayload.meta.source;
+    historyUi.source.textContent = `Údaje z ČHMÚ načteny ${formatTime(source.fetchedAt, 'datetime')}; `
+        + `licencováno ${source.license}.`
+        + (source.cacheStatus === 'stale' ? ' Zobrazuje se zastaralá cache.' : '');
+    setMessage(historyUi.warning, (historyPayload.meta.warnings || []).join(' '));
+}
+
+async function loadHistory() {
+    if (!historyUi) return;
+    const requestId = ++historyRequest;
+    setMessage(historyUi.error, '');
+    try {
+        const payload = await fetchJson(historyPanel.dataset.api, 15000);
+        if (requestId !== historyRequest) return;
+        historyPayload = payload;
+        renderHistory();
+    } catch (error) {
+        if (requestId === historyRequest) {
+            setMessage(historyUi.error, error.message || 'Historii SVRS se nepodařilo načíst.');
+        }
+    }
+}
+
+const tabs = [
+    { button: document.getElementById('air-quality-live-tab'), panel: document.getElementById('air-quality-live-panel') },
+    { button: document.getElementById('air-quality-history-tab'), panel: historyPanel },
+].filter(tab => tab.button && tab.panel);
+
+function activateTab(index, focus = false) {
+    tabs.forEach((tab, tabIndex) => {
+        const selected = index === tabIndex;
+        tab.button.setAttribute('aria-selected', selected ? 'true' : 'false');
+        tab.button.setAttribute('tabindex', selected ? '0' : '-1');
+        tab.button.classList.toggle('active', selected);
+        tab.panel.hidden = !selected;
+    });
+    if (focus) tabs[index].button.focus();
+    if (tabs[index].panel === historyPanel && !historyPayload) loadHistory();
+}
+
+tabs.forEach((tab, index) => {
+    tab.button.addEventListener('click', () => activateTab(index));
+    tab.button.addEventListener('keydown', event => {
+        let next = index;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        activateTab(next, true);
+    });
+});
+if (ui.comparisonStation) {
+    ui.comparisonStation.addEventListener('change', () => load(ui.comparisonStation.value || null));
+}
+if (historyUi) {
+    [historyUi.year, historyUi.pollutant, historyUi.type].forEach(select =>
+        select.addEventListener('change', renderHistory));
 }
 
 function renderForecast(payload) {

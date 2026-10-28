@@ -25,6 +25,37 @@ body {
     background-color: var(--wx-page-bg);
 }
 
+.svrs-timeline {
+    list-style: none;
+    margin: 0 0 1rem 0.5rem;
+    padding: 0 0 0 1.25rem;
+    border-inline-start: 2px solid var(--bs-border-color);
+}
+
+.svrs-timeline > li {
+    position: relative;
+    padding: 0 0 1rem 0.25rem;
+}
+
+.svrs-timeline > li::before {
+    position: absolute;
+    inset-inline-start: -1.67rem;
+    top: 0.35rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2px solid var(--bs-body-bg);
+    border-radius: 50%;
+    background: var(--weather-accent);
+    content: "";
+}
+
+.svrs-timeline-event {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background: var(--bs-tertiary-bg);
+}
+
 main {
     flex: 1 0 auto;
 }

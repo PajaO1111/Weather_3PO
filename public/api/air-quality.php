@@ -22,6 +22,19 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 
+if (array_diff(array_keys($_GET), ['compare']) !== []) {
+    JsonResponse::error(400, 'INVALID_QUERY', 'Povolený parametr je pouze compare.');
+    return;
+}
+$comparisonStationCode = null;
+if (isset($_GET['compare'])) {
+    if (!is_string($_GET['compare']) || preg_match('/^[A-Z0-9_-]{1,16}$/D', $_GET['compare']) !== 1) {
+        JsonResponse::error(400, 'INVALID_QUERY', 'Parametr compare musí být kód blízké stanice.');
+        return;
+    }
+    $comparisonStationCode = $_GET['compare'];
+}
+
 try {
     $settings = weather_settings();
     $cacheDirectory = $settings['chmi_cache_dir'] ?? null;
@@ -29,8 +42,11 @@ try {
         $cacheDirectory = WEATHER_ROOT . '/storage/cache/chmi';
     }
     $gateway = new ChmiGateway($cacheDirectory);
-    $payload = (new AirQualityService($gateway, null, new AirQualityLastValidRepository($cacheDirectory)))->build();
+    $payload = (new AirQualityService($gateway, null, new AirQualityLastValidRepository($cacheDirectory)))
+        ->build($comparisonStationCode);
     JsonResponse::send($payload);
+} catch (InvalidArgumentException $exception) {
+    JsonResponse::error(400, 'INVALID_STATION', $exception->getMessage());
 } catch (\Throwable $exception) {
     error_log('OuBrix Weather API air-quality: ' . get_class($exception) . ' ' . $exception->getMessage());
     JsonResponse::error(
