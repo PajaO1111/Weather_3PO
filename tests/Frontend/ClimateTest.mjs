@@ -44,12 +44,20 @@ const payload = {
     items: Array.from({ length: 12 }, (_, index) => ({
         month: index + 1, temperature: reading(7.9), precipitation: reading(0),
         temperatureDifference: -0.1, precipitationDifference: null,
+        officialNormal: { temperature: 8, temperatureDifference: -0.1, precipitation: 30,
+            precipitationDifference: -30, precipitationPercent: 0 },
     })),
     reference: {
         rainfallAnnual: 493.67, completeYears: 30,
         months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1,
             temperature: { value: 8, count: 30 }, precipitation: { value: null, count: 29 } })),
     },
+    officialNormal: {
+        annual: { temperature: 9.4, precipitation: 493.5 },
+        months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1,
+            temperature: 8, precipitation: 30 })),
+    },
+    officialComparison: { annualRainfallDifference: null, annualRainfallPercent: null },
     meta: {
         warnings: ['Neúplná reference.'],
         sources: { kopisty_monthly: { createdAt: '2026-05-05T10:32:27Z', version: '1.0',
@@ -75,14 +83,22 @@ const cells = elements.get('climate-rows').children[0].children;
 assert.equal(cells[1].textContent, '7,9');
 assert.equal(cells[2].textContent, '8,0');
 assert.equal(cells[3].textContent, '-0,1');
-assert.equal(cells[5].textContent, '0,0');
-assert.equal(cells[6].textContent, '–');
-assert.equal(cells[8].textContent, '29/30');
-assert.match(elements.get('climate-rows').children[1].children[9].textContent, /FLAG_REPEAT=<img>/);
+assert.equal(cells[4].textContent, '8,0');
+assert.equal(cells[5].textContent, '30/30');
+assert.equal(cells[6].textContent, '0,0');
+assert.equal(cells[7].textContent, '30,0');
+assert.equal(cells[8].textContent, '-30,0');
+assert.equal(cells[9].textContent, '0,0');
+assert.equal(cells[10].textContent, '–');
+assert.equal(cells[11].textContent, '29/30');
+assert.match(elements.get('climate-rows').children[1].children[12].textContent, /FLAG_REPEAT=<img>/);
 assert.match(elements.get('climate-source').textContent, /stará cache/);
 assert.equal(options[0].series[0].data[0], 7.9);
 assert.equal(options[0].series[0].data[1], null);
 assert.equal(options[0].series[0].connectNulls, false);
+assert.equal(options[0].series[1].name, 'Oficiální normál ČHMÚ 1991–2020');
+assert.equal(options[0].series[1].data[0], 8);
+assert.equal(options[0].series[2].name, 'Vlastní ref. průměr z archivu');
 assert.equal(options[0].tooltip.valueFormatter(7.9), '7,9 °C');
 const form = elements.get('climate-form');
 const submit = () => form.events.get('submit')({ preventDefault() {} });

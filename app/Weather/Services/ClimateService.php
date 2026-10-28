@@ -33,6 +33,20 @@ final class ClimateService
             $elements = $this->elements($this->load('climate_history_elements', 'Open.Data.Metadata', $sources));
             $document = $this->load('kopisty_monthly', 'Open.Data.MLY', $sources);
             $series = $this->series($document, $station['periods'], $elements);
+            $officialNormals = [
+                'temperature' => $this->normal(
+                    $this->loadNormal('kopisty_normal_temperature', $sources),
+                    'TAVG',
+                    'Normal.AVG',
+                    '°C'
+                ),
+                'precipitation' => $this->normal(
+                    $this->loadNormal('kopisty_normal_precipitation', $sources),
+                    'SRA',
+                    'Normal.SUM',
+                    'mm'
+                ),
+            ];
         } catch (RuntimeException $exception) {
             foreach (array_keys($sources) as $resource) {
                 $this->gateway->invalidate($resource);
@@ -84,6 +98,19 @@ final class ClimateService
                 $value = $item[$key]['value'];
                 $item[$key . 'Difference'] = $base !== null && $value !== null ? $value - $base : null;
             }
+            $item['officialNormal'] = [
+                'temperature' => $officialNormals['temperature']['months'][$month],
+                'temperatureDifference' => $item['temperature']['value'] === null
+                    ? null
+                    : $item['temperature']['value'] - $officialNormals['temperature']['months'][$month],
+                'precipitation' => $officialNormals['precipitation']['months'][$month],
+                'precipitationDifference' => $item['precipitation']['value'] === null
+                    ? null
+                    : $item['precipitation']['value'] - $officialNormals['precipitation']['months'][$month],
+                'precipitationPercent' => $item['precipitation']['value'] === null
+                    ? null
+                    : $item['precipitation']['value'] / $officialNormals['precipitation']['months'][$month] * 100,
+            ];
             $items[] = $item;
         }
         foreach ($sources as $source) {
@@ -99,6 +126,34 @@ final class ClimateService
                 'fromYear' => 1991, 'toYear' => 2020, 'months' => $reference,
                 'rainfallAnnual' => count($annual) === 30 ? array_sum($annual) / 30 : null,
                 'completeYears' => count($annual),
+            ],
+            'officialNormal' => [
+                'label' => 'Oficiální staniční klimatologický normál ČHMÚ 1991–2020',
+                'fromYear' => 1991,
+                'toYear' => 2020,
+                'months' => array_map(static function (int $month) use ($officialNormals): array {
+                    return [
+                        'month' => $month,
+                        'temperature' => $officialNormals['temperature']['months'][$month],
+                        'precipitation' => $officialNormals['precipitation']['months'][$month],
+                    ];
+                }, range(1, 12)),
+                'annual' => [
+                    'temperature' => $officialNormals['temperature']['annual'],
+                    'precipitation' => $officialNormals['precipitation']['annual'],
+                ],
+                'sources' => [
+                    'temperature' => 'https://opendata.chmi.cz' . $this->sourcePath('kopisty_normal_temperature'),
+                    'precipitation' => 'https://opendata.chmi.cz' . $this->sourcePath('kopisty_normal_precipitation'),
+                ],
+            ],
+            'officialComparison' => [
+                'annualRainfallDifference' => $this->annualRainfall($series[$year]) === null
+                    ? null
+                    : $this->annualRainfall($series[$year]) - $officialNormals['precipitation']['annual'],
+                'annualRainfallPercent' => $this->annualRainfall($series[$year]) === null
+                    ? null
+                    : $this->annualRainfall($series[$year]) / $officialNormals['precipitation']['annual'] * 100,
             ],
             'meta' => [
                 'sourceCreatedAt' => ChmiJson::time($document['datumVytvoreni']),
@@ -125,6 +180,88 @@ final class ClimateService
         $sources[$resource]['createdAt'] = ChmiJson::time($document['datumVytvoreni'] ?? null);
         $sources[$resource]['version'] = $document['verzeDat'];
         return $document;
+    }
+
+    private function loadNormal(string $resource, array &$sources): string
+    {
+        $response = $this->gateway->fetch($resource);
+        $body = $response['body'];
+        unset($response['body']);
+        $sources[$resource] = $response;
+        $sources[$resource]['createdAt'] = null;
+        $sources[$resource]['version'] = 'klimatologický normál 1991–2020';
+        if ($body === '' || strlen($body) > 25000) {
+            throw new RuntimeException('Soubor staničního normálu je prázdný nebo překračuje limit.');
+        }
+        return $body;
+    }
+
+    /**
+     * @return array{months: array<int, float>, annual: float}
+     */
+    private function normal(string $csv, string $element, string $valueHeader, string $unit): array
+    {
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            throw new RuntimeException('CSV staničního normálu nelze zpracovat.');
+        }
+        try {
+            if (fwrite($stream, $csv) !== strlen($csv)) {
+                throw new RuntimeException('CSV staničního normálu nelze přečíst.');
+            }
+            rewind($stream);
+            $header = fgetcsv($stream, 4096, ',', '"', '\\');
+            if (!is_array($header) || $header !== ['Eg.Gh.Id', 'Eg.El.Abbreviation', 'Month', $valueHeader]) {
+                throw new RuntimeException('CSV staničního normálu má neočekávaný formát.');
+            }
+            $months = [];
+            $annual = null;
+            while (($row = fgetcsv($stream, 4096, ',', '"', '\\')) !== false) {
+                if ($row === [null]) {
+                    continue;
+                }
+                if (count($row) !== 4 || $row[0] !== KopistyService::WSI || $row[1] !== $element
+                    || !preg_match('/^(?:[1-9]|1[0-3])$/D', $row[2])
+                    || !preg_match('/^-?(?:\d+(?:\.\d*)?|\.\d+)$/D', $row[3])) {
+                    throw new RuntimeException('CSV staničního normálu obsahuje neplatný řádek.');
+                }
+                $month = (int) $row[2];
+                $value = (float) $row[3];
+                if (!is_finite($value) || ($unit === 'mm' && $value < 0)) {
+                    throw new RuntimeException('Hodnota staničního normálu je mimo povolený rozsah.');
+                }
+                if ($month === 13) {
+                    if ($annual !== null) {
+                        throw new RuntimeException('CSV staničního normálu obsahuje duplicitní roční hodnotu.');
+                    }
+                    $annual = $value;
+                } else {
+                    if (isset($months[$month])) {
+                        throw new RuntimeException('CSV staničního normálu obsahuje duplicitní měsíc.');
+                    }
+                    $months[$month] = $value;
+                }
+            }
+            if (count($months) !== 12 || $annual === null) {
+                throw new RuntimeException('CSV staničního normálu neobsahuje všech 12 měsíců a roční hodnotu.');
+            }
+            ksort($months, SORT_NUMERIC);
+            return ['months' => $months, 'annual' => $annual];
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    private function sourcePath(string $resource): string
+    {
+        $paths = [
+            'kopisty_normal_temperature' => '/meteorology/products/climate_normal_stations/period_1991_2020/temperature/0-20000-0-11433_T_1991_2020_normal.csv',
+            'kopisty_normal_precipitation' => '/meteorology/products/climate_normal_stations/period_1991_2020/precipitation/0-20000-0-11433_SRA_1991_2020_normal.csv',
+        ];
+        if (!isset($paths[$resource])) {
+            throw new RuntimeException('Neznámý zdroj klimatologického normálu.');
+        }
+        return $paths[$resource];
     }
 
     private function station(array $document): array

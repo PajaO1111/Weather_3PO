@@ -8,8 +8,8 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku aktuální kvality ovzduší pro Most (UMOM), serverovou validaci dat
-> a cache s viditelným stavem zastaralosti. Připravena je také fáze 5 – historické
-> Klima Kopisty s vypočtenými referenčními průměry 1991–2020.
+> a cache s viditelným stavem zastaralosti. Stránka historického Klima Kopisty
+> nyní odděluje oficiální normály ČHMÚ 1991–2020 od vlastního výpočtu z archivu.
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
 > Fáze 8 přidává mapu radaru MAX_Z_MASK a hodinového odhadu MERGE.
@@ -370,10 +370,13 @@ uzavřený rok. Neplatný, nepublikovaný či aktuální rok vrací 400, nepovol
   Duplicity a neplatné hodnoty jsou explicitní chybou zdroje, nikoli náhradní nulou.
 - Roční srážky vyžadují 12 přijatých měsíců. Referenční roční úhrn je průměr
   30 úplných ročních součtů. Roční průměr teploty se nepočítá.
-- Jde o **vypočtený referenční průměr ČHMÚ Kopisty 1991–2020**, ne oficiálně
-  publikovaný normál ČHMÚ ani normál OuBrix. Nepotvrzuje homogenitu řady ani úplnost
-  denních podkladů; publikované příznaky a metadata nejsou garancí těchto vlastností.
-- Archiv se znovu načítá po 24 hodinách, metadata po 7 dnech, včetně jejich
+- Oficiální normály teploty a srážek jsou samostatné produkty ČHMÚ 1991–2020
+  pro stanici Kopisty. Měsíční odchylky se počítají jen z přijatých hodnot
+  bez příznaků; srážkové procento je hodnota / normál × 100.
+- Dříve počítaný **vlastní referenční průměr z archivu MLY** zůstává samostatně
+  zobrazený a nesmí být zaměněn za oficiální normál. Normál Kopist není normálem
+  lokality OuBrix. Archivní řada nepotvrzuje homogenitu ani úplnost denních podkladů.
+- Archiv se znovu načítá po 24 hodinách, metadata a oficiální normály po 7 dnech, včetně jejich
   publikovaného data vytvoření a verze. Revize tak nezůstanou v cache neomezeně.
   Při výpadku se použije pouze viditelně označená stará cache.
   Probíhající rok/recent, API30 ani jevy/phenomena nejsou do této stránky přimíchány.

@@ -14,6 +14,8 @@ final class ClimateFixtures
     public static function sources(): array
     {
         $wsi = '0-20000-0-11433';
+        $temperatureNormals = [-0.3, 0.8, 4.4, 9.9, 14.5, 17.9, 19.7, 18.9, 14.0, 8.8, 4.1, 0.6];
+        $precipitationNormals = [29.8, 22.4, 28.2, 25.0, 53.7, 62.1, 65.0, 65.0, 41.7, 34.1, 32.1, 34.5];
         $rows = [];
         for ($year = 1991; $year <= 2020; $year++) {
             for ($month = 1; $month <= 12; $month++) {
@@ -23,6 +25,14 @@ final class ClimateFixtures
                     $month * 10 + $year - 1991, '', ''];
             }
         }
+        $temperatureCsv = "Eg.Gh.Id,Eg.El.Abbreviation,Month,Normal.AVG\n";
+        $precipitationCsv = "Eg.Gh.Id,Eg.El.Abbreviation,Month,Normal.SUM\n";
+        foreach (range(1, 12) as $month) {
+            $temperatureCsv .= $wsi . ',TAVG,' . $month . ',' . $temperatureNormals[$month - 1] . "\n";
+            $precipitationCsv .= $wsi . ',SRA,' . $month . ',' . $precipitationNormals[$month - 1] . "\n";
+        }
+        $temperatureCsv .= $wsi . ",TAVG,13,9.4\n";
+        $precipitationCsv .= $wsi . ",SRA,13,493.5\n";
         return [
             'climate_history_station' => self::document('Open.Data.Metadata',
                 'WSI,FULL_NAME,BEGIN_DATE,END_DATE,GEOGR1,GEOGR2,ELEVATION',
@@ -33,6 +43,8 @@ final class ClimateFixtures
                  ['DLY', $wsi, '1969-01-01T00:00:00Z', '3999-12-31T23:59:00Z', 'SRA', 'Srážka', 'mm', '06:00']]),
             'kopisty_monthly' => self::document('Open.Data.MLY',
                 'STATION,ELEMENT,YEAR,MONTH,TIMEFUNCTION,MDFUNCTION,VALUE,FLAG_REPEAT,FLAG_INTERRUPTED', $rows),
+            'kopisty_normal_temperature' => $temperatureCsv,
+            'kopisty_normal_precipitation' => $precipitationCsv,
         ];
     }
 

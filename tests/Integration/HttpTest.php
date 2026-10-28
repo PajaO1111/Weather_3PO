@@ -154,12 +154,20 @@ return static function (): int {
         check(strpos($body, 'js/climate.js') !== false && strpos($body, 'Klima Kopisty') !== false
             && strpos($body, 'FLAG_REPEAT') !== false && strpos($body, '<details class="weather-menu">') !== false,
             'climate module, dropdown menu and methodology');
+        check(strpos($body, 'Oficiální normál ČHMÚ 1991–2020') !== false
+            && strpos($body, 'Normál %') !== false, 'climate page labels official station normal distinctly');
         [$status, $type, $body] = $request('/api/climate.php');
         $climate = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0
             && $climate['year'] === 2020 && count($climate['items']) === 12, 'actual climate API default year');
         check($climate['reference']['months'][0]['temperature']['count'] === 30
             && $climate['reference']['rainfallAnnual'] === 954.0, 'actual climate API reference calculations');
+        check($climate['officialNormal']['annual']['temperature'] === 9.4
+            && $climate['officialNormal']['annual']['precipitation'] === 493.5
+            && $climate['officialNormal']['months'][0]['precipitation'] === 29.8,
+            'climate API exposes official monthly and independent annual normals');
+        check($climate['officialComparison']['annualRainfallPercent'] !== null
+            && count($climate['meta']['sources']) === 5, 'climate API reports annual comparison and all source provenance');
         [$status, , $body] = $request('/api/climate.php?year=1991');
         check($status === 200 && json_decode($body, true)['year'] === 1991, 'climate year selection');
         check($request('/api/climate.php', 'POST')[0] === 405, 'climate rejects POST');

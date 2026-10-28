@@ -46,6 +46,16 @@ final class ChmiGateway
             'ttl' => 86400,
             'maxBytes' => 12000000,
         ],
+        'kopisty_normal_temperature' => [
+            'path' => '/meteorology/products/climate_normal_stations/period_1991_2020/temperature/0-20000-0-11433_T_1991_2020_normal.csv',
+            'ttl' => 604800,
+            'maxBytes' => 25000,
+        ],
+        'kopisty_normal_precipitation' => [
+            'path' => '/meteorology/products/climate_normal_stations/period_1991_2020/precipitation/0-20000-0-11433_SRA_1991_2020_normal.csv',
+            'ttl' => 604800,
+            'maxBytes' => 25000,
+        ],
         'air_metadata' => [
             'path' => '/air_quality/now/metadata/metadata.json',
             'ttl' => 86400,

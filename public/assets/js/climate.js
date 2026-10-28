@@ -34,7 +34,9 @@ function showCharts() {
             series: [
                 { name: String(payload.year), type: key === 'temperature' ? 'line' : 'bar',
                     connectNulls: false, data: payload.items.map(row => row[key].value) },
-                { name: 'Reference 1991–2020', type: 'line', connectNulls: false,
+                { name: 'Oficiální normál ČHMÚ 1991–2020', type: 'line', connectNulls: false,
+                    lineStyle: { width: 3 }, data: payload.officialNormal.months.map(row => row[key]) },
+                { name: 'Vlastní ref. průměr z archivu', type: 'line', connectNulls: false,
                     data: payload.reference.months.map(row => row[key].value) },
             ],
         }, { notMerge: true });
@@ -68,18 +70,31 @@ function render() {
     document.getElementById('climate-source').textContent =
         `${payload.station.name} (${payload.station.id}). ${sourceDetails.join('. ')}.`;
     document.getElementById('climate-summary').textContent =
-        `Rok ${payload.year}: roční srážky ${formatNumber(payload.rainfallAnnual, 1)} mm. Vypočtený referenční roční úhrn 1991–2020: ${formatNumber(payload.reference.rainfallAnnual, 1)} mm (${payload.reference.completeYears}/30 úplných let).`;
+        `Rok ${payload.year}: roční srážky ${formatNumber(payload.rainfallAnnual, 1)} mm; `
+        + `oficiální roční normál ČHMÚ ${formatNumber(payload.officialNormal.annual.precipitation, 1)} mm; `
+        + `roční rozdíl ${formatNumber(payload.officialComparison.annualRainfallDifference, 1)} mm `
+        + `(${formatNumber(payload.officialComparison.annualRainfallPercent, 1)} % normálu). `
+        + `Vlastní referenční průměr archivu: ${formatNumber(payload.reference.rainfallAnnual, 1)} mm `
+        + `(${payload.reference.completeYears}/30 úplných let).`;
     const body = document.getElementById('climate-rows');
     body.replaceChildren();
     for (const row of payload.items) {
         const reference = payload.reference.months[row.month - 1];
         const tr = document.createElement('tr');
         for (const text of [
-            monthNames[row.month - 1], formatNumber(row.temperature.value, 1),
-            formatNumber(reference.temperature.value, 1), formatNumber(row.temperatureDifference, 1),
-            `${reference.temperature.count}/30`, formatNumber(row.precipitation.value, 1),
-            formatNumber(reference.precipitation.value, 1), formatNumber(row.precipitationDifference, 1),
-            `${reference.precipitation.count}/30`, `${statusText(row.temperature, 'T')}; ${statusText(row.precipitation, 'SRA')}`,
+            monthNames[row.month - 1],
+            formatNumber(row.temperature.value, 1),
+            formatNumber(row.officialNormal.temperature, 1),
+            formatNumber(row.officialNormal.temperatureDifference, 1),
+            formatNumber(reference.temperature.value, 1),
+            `${reference.temperature.count}/30`,
+            formatNumber(row.precipitation.value, 1),
+            formatNumber(row.officialNormal.precipitation, 1),
+            formatNumber(row.officialNormal.precipitationDifference, 1),
+            formatNumber(row.officialNormal.precipitationPercent, 1),
+            formatNumber(reference.precipitation.value, 1),
+            `${reference.precipitation.count}/30`,
+            `${statusText(row.temperature, 'T')}; ${statusText(row.precipitation, 'SRA')}`,
         ]) {
             const td = document.createElement('td');
             td.textContent = text;

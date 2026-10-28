@@ -11,7 +11,9 @@ return static function (): int {
     $sources = ClimateFixtures::sources();
     $requests = [];
     $paths = ['meta1.json' => 'climate_history_station', 'meta2.json' => 'climate_history_elements',
-        'mly-0-20000-0-11433.json' => 'kopisty_monthly'];
+        'mly-0-20000-0-11433.json' => 'kopisty_monthly',
+        '0-20000-0-11433_T_1991_2020_normal.csv' => 'kopisty_normal_temperature',
+        '0-20000-0-11433_SRA_1991_2020_normal.csv' => 'kopisty_normal_precipitation'];
     $gateway = new ChmiGateway($directory, static function (string $url) use (&$sources, &$requests, $paths): string {
         $key = $paths[basename(parse_url($url, PHP_URL_PATH))];
         $requests[] = $key;
@@ -25,7 +27,7 @@ return static function (): int {
     };
     try {
         $result = $service->build();
-        $assert(count($requests) === 3 && count($result['items']) === 12, 'three allowlisted sources, twelve months');
+        $assert(count($requests) === 5 && count($result['items']) === 12, 'five allowlisted sources, twelve months');
         $assert($result['year'] === 2020 && count($result['years']) === 30, 'default latest published year');
         $assert(abs($result['reference']['months'][0]['temperature']['value'] - 2.45) < 1e-10,
             'monthly temperature reference averages thirty same-calendar months');
@@ -33,10 +35,20 @@ return static function (): int {
             'monthly rainfall reference is not regional normal');
         $assert($result['reference']['rainfallAnnual'] === 954.0 && $result['reference']['completeYears'] === 30,
             'annual rainfall averages complete annual sums');
+        $assert($result['officialNormal']['annual']['temperature'] === 9.4
+            && $result['officialNormal']['annual']['precipitation'] === 493.5,
+            'load official annual normals directly, not by summing rounded monthly values');
+        $assert($result['officialNormal']['months'][0]['temperature'] === -0.3
+            && $result['officialNormal']['months'][0]['precipitation'] === 29.8,
+            'load the exact official monthly normals for Kopisty');
+        $assert($result['items'][0]['officialNormal']['temperatureDifference'] !== null
+            && $result['items'][0]['officialNormal']['precipitationPercent'] !== null
+            && $result['officialComparison']['annualRainfallPercent'] !== null,
+            'compare accepted closed-month/year observations with the official normal');
         $assert($result['items'][0]['temperature']['value'] === 3.9
             && abs($result['items'][0]['temperatureDifference'] - 1.45) < 1e-10, 'raw decimal and signed anomaly');
-        $assert(count($requests) === 3 && $service->build(1991)['year'] === 1991
-            && count($requests) === 3, 'cached requests, selectable historical year');
+        $assert(count($requests) === 5 && $service->build(1991)['year'] === 1991
+            && count($requests) === 5, 'cached requests, selectable historical year');
         $document = json_decode($sources['kopisty_monthly'], true);
         $rows = &$document['data']['data']['values'];
         $rows[0][6] = 0;
