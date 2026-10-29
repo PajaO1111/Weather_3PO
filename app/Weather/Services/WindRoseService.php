@@ -36,6 +36,21 @@ final class WindRoseService
     {
         $to = $now->setTimezone(new DateTimeZone('UTC'));
         $from = $to->sub(new DateInterval('PT' . $hours . 'H'));
+        $rose = $this->buildRange($station, $from, $to, $maxRows);
+        $rose['hours'] = $hours;
+        return $rose;
+    }
+
+    /**
+     * Růžice za pevný interval [from, to) – např. zvolený kalendářní týden.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildRange(string $station, DateTimeImmutable $from, DateTimeImmutable $to, int $maxRows): array
+    {
+        $utc = new DateTimeZone('UTC');
+        $from = $from->setTimezone($utc);
+        $to = $to->setTimezone($utc);
         $rows = $this->repository->between(
             $station,
             $from->format('Y-m-d H:i:s'),
@@ -48,7 +63,7 @@ final class WindRoseService
         }
         $rose = self::aggregate($rows);
         $rose['station'] = $station;
-        $rose['hours'] = $hours;
+        $rose['hours'] = (int) round(($to->getTimestamp() - $from->getTimestamp()) / 3600);
         $rose['from'] = $from->format('Y-m-d\TH:i:s\Z');
         $rose['to'] = $to->format('Y-m-d\TH:i:s\Z');
         $rose['truncated'] = $truncated;

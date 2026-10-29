@@ -10,7 +10,7 @@
  * @var string               $content  HTML obsahu stránky (z pages/*)
  * @var string               $pageScript  JS modul stránky v public/assets (např. js/history.js)
  * @var string               $activePage  klíč aktivní položky menu (dashboard | history | stats)
- * @var string               $containerClass  třída hlavního kontejneru (výchozí container-xl)
+ * @var string               $containerClass  třída hlavního kontejneru (výchozí container-fluid wx-wide = celá šíře do 2560 px)
  */
 use OuBrix\Weather\Http\View;
 ?>
@@ -36,7 +36,7 @@ use OuBrix\Weather\Http\View;
 <body>
 <?= View::render('partials/header', ['appName' => $appName, 'baseUrl' => $baseUrl, 'activePage' => isset($activePage) ? $activePage : 'dashboard']) ?>
 
-<main id="obsah" class="<?= View::e(isset($containerClass) ? $containerClass : 'container-xl') ?> py-3 py-md-4">
+<main id="obsah" class="<?= View::e(isset($containerClass) ? $containerClass : 'container-fluid wx-wide') ?> py-3 py-md-4">
 <?= $content ?>
 </main>
 
@@ -49,7 +49,7 @@ use OuBrix\Weather\Http\View;
 // Hosting posílá JS s cache na 30 dní; bez verze by prohlížeč mohl spojit
 // nový skript stránky se starým api.js a stránka by spadla.
 $modules = [];
-foreach (['js/api.js', 'js/charts.js', 'js/gauges.js', 'js/week.js'] as $module) {
+foreach (['js/api.js', 'js/charts.js', 'js/gauges.js', 'js/isoweek.js', 'js/week.js'] as $module) {
     $modules[$baseUrl . '/assets/' . $module] = View::asset($module);
 }
 ?>

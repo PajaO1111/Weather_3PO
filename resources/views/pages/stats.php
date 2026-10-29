@@ -124,11 +124,12 @@ $selected = $period === 'all' ? 'all' : (string) $period;
         </div>
     </section>
 
-    <!-- Paprskový graf: denní chod za posledních 7 dní (24 paprsků = hodiny) -->
+    <!-- Paprskový graf: denní chod za 7 dní (24 paprsků = hodiny); posledních 7 dní nebo zvolený ISO týden -->
     <section class="card mb-3" aria-labelledby="week-title" id="week"
              data-api-history="<?= View::e($baseUrl) ?>/api/history.php"
              data-api-windrose="<?= View::e($baseUrl) ?>/api/windrose.php?hours=168"
-             data-timezone="<?= View::e($timezone) ?>">
+             data-timezone="<?= View::e($timezone) ?>"
+             data-first-year="<?= (int) $currentYear - 1 ?>">
         <div class="card-body">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <h2 class="h6 mb-0 me-auto" id="week-title">Posledních 7 dní – denní chod</h2>
@@ -143,6 +144,17 @@ $selected = $period === 'all' ? 'all' : (string) $period;
                     <button type="button" class="btn btn-outline-secondary" data-metric="solar" aria-pressed="false">Záření</button>
                     <button type="button" class="btn btn-outline-secondary" data-metric="uv" aria-pressed="false">UV</button>
                 </div>
+            </div>
+            <!-- Výběr týdne doplní week.js (bez JS se graf nezobrazí, proto je skrytý). -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2 wx-week-period" id="week-period" hidden>
+                <label class="small text-body-secondary" for="week-select">Období</label>
+                <div class="input-group input-group-sm w-auto">
+                    <button type="button" class="btn btn-outline-secondary" id="week-prev" aria-label="Předchozí týden" title="Předchozí týden">‹</button>
+                    <select class="form-select form-select-sm" id="week-select"></select>
+                    <button type="button" class="btn btn-outline-secondary" id="week-next" aria-label="Následující týden" title="Následující týden">›</button>
+                </div>
+                <button type="button" class="btn btn-sm btn-link" id="week-latest" hidden>Zpět na posledních 7 dní</button>
+                <span class="small text-body-secondary" id="week-status" aria-live="polite"></span>
             </div>
             <div id="week-chart" class="chart chart-radar" role="img" aria-label="Paprskový graf za posledních 7 dní"></div>
             <p class="small text-body-secondary mb-0" id="week-note"></p>

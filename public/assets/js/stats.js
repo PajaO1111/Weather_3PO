@@ -131,6 +131,9 @@ function updateYears(years) {
 function render(data) {
     fillFields(root, data);
     updateYears(data.years || []);
+    if (weekPanel) {
+        weekPanel.setYears(data.years || []);
+    }
     const period = data.period || {};
     const group = period.group;
     ui.rangeLabel.textContent = period.fromDate
@@ -264,8 +267,15 @@ function renderRecords(data) {
 // Události
 // ---------------------------------------------------------------------------
 
+/** Adresa stránky se zvoleným rokem; ostatní parametry (např. week) zůstanou. */
+function pageUrlFor(year) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('year', year);
+    return `${pageUrl}?${params}`;
+}
+
 select.addEventListener('change', () => {
-    history.pushState(null, '', `${pageUrl}?${new URLSearchParams({ year: select.value })}`);
+    history.pushState(null, '', pageUrlFor(select.value));
     load();
 });
 
@@ -278,6 +288,9 @@ window.addEventListener('popstate', () => {
     const year = new URLSearchParams(window.location.search).get('year');
     const fallback = String(new Date().getFullYear());
     const wanted = year || fallback;
+    if (wanted === select.value && state.data) {
+        return; // změnil se jen týden paprskového grafu
+    }
     if (![...select.options].some((o) => o.value === wanted)) {
         select.add(new Option(wanted === 'all' ? 'Celé období (po letech)' : `Rok ${wanted} (po měsících)`, wanted));
     }
@@ -290,8 +303,9 @@ window.addEventListener('resize', () => chart && chart.resize());
 
 load();
 
-// Paprskový graf 7 dní nezávisí na zvoleném roce.
+// Paprskový graf 7 dní nezávisí na zvoleném roce (týden má vlastní parametr ?week=).
 const weekSection = document.getElementById('week');
-if (weekSection) {
-    createWeekPanel(weekSection).load();
+const weekPanel = weekSection ? createWeekPanel(weekSection) : null;
+if (weekPanel) {
+    weekPanel.load();
 }

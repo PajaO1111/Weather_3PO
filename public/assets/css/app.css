@@ -103,6 +103,142 @@ main {
     margin-right: auto;
 }
 
+/* Ikony navigace (sprite partials/icons.php) */
+.wx-icon-sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.wx-icon {
+    width: 1.25em;
+    height: 1.25em;
+    flex: none;
+    vertical-align: -0.25em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.wx-icon .wx-icon-fill {
+    fill: currentColor;
+}
+
+/* Široký displej: řada ikon hned vedle loga, popisek jako bublina */
+.weather-iconbar {
+    display: none;
+}
+
+@media (min-width: 992px) {
+    .weather-brand {
+        margin-right: 0.5rem;
+    }
+
+    .weather-iconbar {
+        display: flex;
+        align-items: center;
+        margin-right: auto;
+    }
+
+    .weather-iconbar-group > ul {
+        display: flex;
+        gap: 0.15rem;
+    }
+
+    .weather-iconbar-group + .weather-iconbar-group {
+        margin-left: 0.45rem;
+        padding-left: 0.45rem;
+        border-left: 1px solid var(--bs-border-color);
+    }
+
+    .weather-iconbar-link {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        color: var(--bs-secondary-color);
+        border-radius: var(--bs-border-radius);
+        text-decoration: none;
+    }
+
+    .weather-iconbar-link .wx-icon {
+        width: 1.45rem;
+        height: 1.45rem;
+    }
+
+    .weather-iconbar-link:hover,
+    .weather-iconbar-link:focus-visible {
+        color: var(--weather-accent);
+        background: var(--bs-body-bg);
+    }
+
+    .weather-iconbar-link:focus-visible {
+        outline: 3px solid var(--weather-accent);
+        outline-offset: 2px;
+    }
+
+    .weather-iconbar-link.active {
+        color: var(--weather-accent);
+        background: var(--bs-body-bg);
+        box-shadow: inset 0 -3px 0 var(--weather-accent);
+    }
+
+    /* Popisek je skutečný text odkazu (přístupný název), vizuálně jen bublina. */
+    .weather-iconbar-label {
+        position: absolute;
+        top: calc(100% + 0.4rem);
+        left: 50%;
+        z-index: 1060;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        color: var(--bs-body-bg);
+        background: var(--bs-emphasis-color);
+        border-radius: var(--bs-border-radius-sm);
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, -0.2rem);
+        clip-path: inset(50%);
+        transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+
+    .weather-iconbar-link:hover .weather-iconbar-label,
+    .weather-iconbar-link:focus-visible .weather-iconbar-label {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        clip-path: none;
+    }
+
+    .weather-menu {
+        display: none;
+    }
+}
+
+@media (min-width: 1400px) {
+    .weather-iconbar-link {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+}
+
+.weather-menu-link .wx-icon {
+    margin-right: 0.35rem;
+    color: var(--bs-secondary-color);
+}
+
+.weather-menu-link.active .wx-icon,
+.weather-menu-link:hover .wx-icon {
+    color: currentColor;
+}
+
+.weather-menu > summary .wx-icon {
+    margin-right: 0.15rem;
+}
+
 .weather-menu {
     position: relative;
 }
@@ -329,8 +465,9 @@ main {
    Stránka „Aktuálně“: hlavička, widgety s měřidly (SVG z gauges.js)
    ========================================================================== */
 
+/* Celá šíře monitoru až do QHD (2560 px); obsah se na větších displejích centruje. */
 .wx-wide {
-    max-width: 1920px;
+    max-width: 2560px;
 }
 
 @media (min-width: 992px) {
@@ -338,6 +475,29 @@ main {
         padding-left: 1.5rem;
         padding-right: 1.5rem;
     }
+}
+
+@media (min-width: 1920px) {
+    .wx-wide {
+        padding-left: 2.5rem;
+        padding-right: 2.5rem;
+    }
+
+    .chart {
+        height: 400px;
+    }
+
+    .radar-map,
+    .air-quality-map {
+        height: min(72vh, 1000px);
+    }
+}
+
+/* Dlouhé texty (vysvětlivky, předpověď) se na širokém monitoru nenatahují přes celou šíři. */
+.wx-wide .forecast-text,
+.wx-wide p.text-body-secondary,
+.wx-wide .lead {
+    max-width: 120ch;
 }
 
 /* Hlavička – pozadí podle stavu počasí a dne/noci; v tmavém motivu ztlumené */
@@ -812,9 +972,31 @@ main {
         animation: none;
     }
 }
-/* Paprskový graf 7 dní (Statistiky) */
+/* Paprskový graf 7 dní (Statistiky) – výška roste s monitorem (Full HD ~ 650 px, QHD ~ 940 px) */
 .chart.chart-radar {
     height: 480px;
+}
+
+@media (min-width: 1200px) {
+    .chart.chart-radar {
+        height: clamp(520px, 68vh, 780px);
+    }
+}
+
+@media (min-width: 1920px) {
+    .chart.chart-radar {
+        height: clamp(620px, 72vh, 980px);
+    }
+}
+
+.wx-week-period .form-select {
+    min-width: 15rem;
+}
+
+.wx-week-period .input-group > .btn {
+    min-width: 2.25rem;
+    font-size: 1.1rem;
+    line-height: 1;
 }
 
 .wx-week-metrics .btn {

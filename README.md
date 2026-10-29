@@ -108,7 +108,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── air-quality-forecast.php   modelová hodinová předpověď pro ORP Most (JSON)
 │   │   ├── air-quality-map.php        operativní mapy kvality ovzduší ČHMÚ (JSON)
 │   │   ├── air-quality-five-year.php  pětiletá GIS mapa pro okres Most (JSON)
-│   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
+│   │   └── windrose.php              větrná růžice za posledních N hodin / zvolené dny (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
 │       └── js/
@@ -592,18 +592,25 @@ Vychází z denních agregací `HistoryService`. Průměry, ledové dny, tropick
 „nejteplejší noci“, „nejchladnější dny“ a denní rozpětí se počítají jen z
 **úplných dnů** (data alespoň z 18 hodin) – den s výpadkem stanice by je zkreslil.
 
-Pod grafem „Teplota a srážky po měsících“ je **paprskový graf posledních 7 dní**
+Pod grafem „Teplota a srážky po měsících“ je **paprskový graf 7 dní**
 (`week.js`): 24 paprsků = hodiny místního času (0 h nahoře, po směru hodin),
-jedna křivka = jeden den, dnešek oranžově. Přepíná se teplota, rosný bod, vlhkost,
-tlak, nárazy, srážky, záření a UV (data z `api/history.php?resolution=hour`);
-volba „Vítr (růžice)“ zobrazí větrnou růžici z `api/windrose.php`.
+jedna křivka = jeden den. Výchozí je posledních 7 dní (dnešek oranžově); výběrem
+„Období“ (nebo šipkami ‹ ›) lze zobrazit kterýkoli **kalendářní týden ISO**
+(po–ne, `?week=2026-W43` v adrese, funguje Zpět/Vpřed a nezávisí na `?year=`).
+Dny bez dat se nekreslí a pod grafem je uvedeno, že období je neúplné.
+Přepíná se teplota, rosný bod, vlhkost, tlak, nárazy, srážky, záření a UV
+(data z `api/history.php?resolution=hour`); volba „Vítr (růžice)“ zobrazí větrnou
+růžici z `api/windrose.php` za stejné období. Graf se na velkém monitoru zvětší
+(Full HD ~ 650 px, QHD ~ 940 px) včetně písma a popisků všech hodin.
 
-### `api/windrose.php?hours=N`
+### `api/windrose.php?hours=N` / `?from=RRRR-MM-DD&to=RRRR-MM-DD`
 
-Větrná růžice za posledních `N` hodin (výchozí a maximum 168). Odpověď:
+Větrná růžice za posledních `N` hodin (výchozí a maximum 168), nebo za místní
+dny `from`–`to` včetně obou krajních (nejvýš 7 dní, `to` ne v budoucnu; navíc
+vrací `fromDate`, `toDate`). `hours` nelze kombinovat s `from`/`to`. Odpověď:
 `sectors` (16 směrů od S), `classes` (`from`, `to`, `label`, `percent[16]`),
 `calm` (% bezvětří < 1 km/h), `samples`, `prevailing`, `speedAvg`, `speedMax`,
-`from`, `to`, `truncated`. Neplatné `hours` → 400.
+`from`, `to`, `truncated`. Neplatné parametry → 400.
 
 ### `api/health.php`
 
@@ -802,6 +809,8 @@ php tests/run.php
 # ověření desetinné teploty ve frontendových modulech (Node.js, bez balíčků)
 node tests/Frontend/TemperaturePrecisionTest.mjs
 
+# kalendářní ISO týdny pro výběr týdne v paprskovém grafu (Statistiky)
+node tests/Frontend/IsoWeekTest.mjs
 # lokální náhled bez produkční DB (testovací data 26 h)
 php -S 127.0.0.1:8765 -t public tests/support/router.php
 # → http://127.0.0.1:8765/index.php, /history.php, /stats.php, /analytics.php, /air-quality.php

@@ -109,6 +109,10 @@ return static function (): int {
         check($status === 200 && json_decode($body, true)['period']['group'] === 'year', 'stats api all');
         check($request('/api/stats.php?year=1999')[0] === 400, 'stats invalid 400');
         check(strpos($request('/stats.php')[2], 'data-api-windrose="/api/windrose.php?hours=168"') !== false, 'stats page has radar section');
+        $statsPage = $request('/stats.php')[2];
+        check(strpos($statsPage, 'id="week-select"') !== false && strpos($statsPage, 'js/isoweek.js') !== false, 'stats page has week selection');
+        check(strpos($statsPage, 'class="weather-iconbar') !== false && strpos($statsPage, '<symbol id="i-hydrology"') !== false
+            && strpos($statsPage, 'href="#i-stats"') !== false && substr_count($statsPage, 'aria-current="page"') === 2, 'icon navigation with active page');
         [$status, $type, $body] = $request('/analytics.php');
         check($status === 200 && strpos($type, 'text/html') === 0 && strpos($body, 'data-api-analytics="/api/analytics.php"') !== false, 'analytics page');
         check(strpos($body, 'href="/analytics.php"') !== false && strpos($body, 'js/analytics.js') !== false, 'analytics page navigation and module');
@@ -121,6 +125,15 @@ return static function (): int {
         $rose = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0 && count($rose['sectors']) === 16 && $rose['hours'] === 168, 'windrose api json');
         check($request('/api/windrose.php?hours=0')[0] === 400, 'windrose invalid 400');
+        $roseToday = new DateTimeImmutable('now', new DateTimeZone('Europe/Prague'));
+        $roseFrom = $roseToday->modify('-2 days')->format('Y-m-d');
+        $roseTo = $roseToday->format('Y-m-d');
+        [$status, , $body] = $request("/api/windrose.php?from=$roseFrom&to=$roseTo");
+        $rose = json_decode($body, true);
+        check($status === 200 && $rose['fromDate'] === $roseFrom && $rose['toDate'] === $roseTo && $rose['samples'] > 0, 'windrose api date range');
+        check($request("/api/windrose.php?from=$roseFrom")[0] === 400
+            && $request("/api/windrose.php?from=$roseFrom&to=$roseTo&hours=24")[0] === 400
+            && $request('/api/windrose.php?from=2026-01-01&to=2026-01-31')[0] === 400, 'windrose range invalid 400');
 
         [$status, $type, $body] = $request('/air-quality.php');
         check($status === 200 && strpos($type, 'text/html') === 0, 'air quality page 200 html');
@@ -239,7 +252,7 @@ return static function (): int {
         check(strpos($body, 'js/forecast.js') !== false
             && strpos($body, 'není lokální předpovědí pro Most') !== false, 'forecast module and geographical disclaimer');
         check(strpos($body, 'aria-current="page"') !== false
-            && strpos($body, '<summary>Menu</summary>') !== false
+            && strpos($body, ' Menu</summary>') !== false
             && strpos($body, 'js/navigation.js') !== false, 'native accessible navigation, enhancement script and active page');
         [$status, $type, $body] = $request('/api/forecast.php');
         $forecast = json_decode($body, true);
@@ -298,7 +311,7 @@ return static function (): int {
         ], JSON_THROW_ON_ERROR));
         [$status, , $body] = $request('/api/radar.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
-        return 84;
+        return 88;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

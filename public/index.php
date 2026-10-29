@@ -28,7 +28,5 @@ echo View::page('pages/dashboard', [
     'seriesHours' => (int) $settings['series_default_hours'],
     'chartGapMinutes' => (int) $settings['chart_gap_minutes'],
     'activePage' => 'dashboard',
-    // Widgety využijí celou šíři velkých monitorů (max. 1920 px, viz app.css).
-    'containerClass' => 'container-fluid wx-wide',
     'pageScript' => 'js/dashboard.js',
 ], 'layouts/main');

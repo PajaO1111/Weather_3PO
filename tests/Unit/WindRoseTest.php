@@ -51,5 +51,10 @@ return static function (): int {
     Fixtures::insert($pdo, $measurement);
     $truncated = $service->build('TEST', 1, $now, 2);
     check($truncated['samples'] === 2 && $truncated['truncated'] === true && $truncated['speedAvg'] === 8.0, 'over-limit result keeps latest rows and reports truncation');
-    return 9;
+
+    // Pevný interval v místním čase (Europe/Prague, říjen = UTC+1 po změně času 25. 10.).
+    $prague = new DateTimeZone('Europe/Prague');
+    $range = $service->buildRange('TEST', new DateTimeImmutable('2026-10-25 10:15:00', $prague), new DateTimeImmutable('2026-10-25 10:50:00', $prague), 100);
+    check($range['samples'] === 2 && $range['from'] === '2026-10-25T09:15:00Z' && $range['to'] === '2026-10-25T09:50:00Z' && $range['hours'] === 1, 'buildRange converts local bounds to UTC');
+    return 10;
 };
