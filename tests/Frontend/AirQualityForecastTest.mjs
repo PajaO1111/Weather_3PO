@@ -57,6 +57,8 @@ for (const id of [
     'air-quality-history-count', 'air-quality-history-events', 'air-quality-history-year',
     'air-quality-history-pollutant', 'air-quality-history-type', 'air-quality-history-chart',
     'air-quality-map-tab', 'air-quality-map-panel', 'air-quality-map-component', 'air-quality-map-type',
+    'air-quality-map-product', 'air-quality-map-operational-controls', 'air-quality-map-five-year-controls',
+    'air-quality-map-five-year-component',
     'air-quality-map-opacity', 'air-quality-map-opacity-value', 'air-quality-map', 'air-quality-map-status',
     'air-quality-map-source', 'air-quality-map-error', 'air-quality-map-warning',
     'air-quality-map-legend-description', 'air-quality-map-legend',
@@ -68,8 +70,11 @@ elements.get('air-quality').dataset.apiAirQuality = '/api/air-quality.php';
 elements.get('air-quality-comparison-station').value = '';
 elements.get('air-quality-history-panel').dataset.api = '/api/air-quality-history.php';
 elements.get('air-quality-map-panel').dataset.api = '/api/air-quality-map.php';
+elements.get('air-quality-map-panel').dataset.apiFiveYear = '/api/air-quality-five-year.php';
+elements.get('air-quality-map-product').value = 'operational';
 elements.get('air-quality-map-component').value = 'PM10';
 elements.get('air-quality-map-type').value = 'hours';
+elements.get('air-quality-map-five-year-component').value = 'PM10';
 elements.get('air-quality-map-opacity').value = '75';
 elements.get('air-quality').querySelector = selector => {
     const component = selector.match(/data-measurement="([^"]+)"/)[1];
@@ -90,11 +95,14 @@ globalThis.getComputedStyle = () => ({
     getPropertyValue: () => '#212529',
 });
 let displayedMap = null;
+let displayedFiveYear = null;
+const createdFiveYearLayers = [];
 globalThis.L = {
     map() {
         return {
             attributionControl: { addAttribution() {} },
             setView() { return this; },
+            fitBounds(bounds, options) { this.lastBounds = bounds; this.fitOptions = options; },
             invalidateSize() {},
         };
     },
@@ -114,6 +122,25 @@ globalThis.L = {
             remove() { this.removed = true; return this; },
             setOpacity(value) { displayedMap.opacity = value; },
         };
+    },
+    geoJSON(data, options = {}) {
+        const layer = {
+            data,
+            options,
+            children: [],
+            addTo() { displayedFiveYear = this; return this; },
+            remove() { this.removed = true; return this; },
+            getBounds() { return [[50.45, 13.4], [50.7, 13.9]]; },
+            setStyle(style) { this.currentStyle = style; },
+        };
+        createdFiveYearLayers.push(layer);
+        const features = data.type === 'FeatureCollection' ? data.features : [data];
+        for (const feature of features) {
+            const child = { bindPopup(content) { this.popup = content; return this; } };
+            if (options.onEachFeature) options.onEachFeature(feature, child);
+            layer.children.push(child);
+        }
+        return layer;
     },
 };
 let chartOption = null;
@@ -213,11 +240,43 @@ const map = {
         sources: { map: { fetchedAt: '2026-10-28T10:33:00Z' } },
     },
 };
+const fiveYear = {
+    component: { code: 'PM10', label: 'PM10 · roční průměr' },
+    period: '2020–2024',
+    layer: { code: 'annual', label: 'Roční průměry · pětiletý produkt 2020–2024' },
+    unit: 'µg/m³',
+    decimals: 1,
+    map: {
+        type: 'FeatureCollection',
+        features: [
+            { type: 'Feature', id: 100, geometry: { type: 'Polygon', coordinates: [] },
+                properties: { gridId: 100, value: 10 } },
+            { type: 'Feature', id: 101, geometry: { type: 'Polygon', coordinates: [] },
+                properties: { gridId: 101, value: null } },
+        ],
+    },
+    boundary: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [] }, properties: {} },
+    legend: {
+        method: 'Pět stejně širokých intervalů v rozsahu zobrazených hodnot; nejde o stupnici limitů.',
+        minimum: 10, maximum: 20,
+        intervals: [{ min: 10, max: 12, color: '#440154' }, { min: 12, max: 14, color: '#3b528b' },
+            { min: 14, max: 16, color: '#21918c' }, { min: 16, max: 18, color: '#5ec962' },
+            { min: 18, max: 20, color: '#fde725' }],
+    },
+    statistics: { gridCells: 2, values: 1, missing: 1 },
+    meta: {
+        generatedAt: '2026-10-28T00:00:00Z',
+        sourcePublishedAt: '2025-11-26',
+        attribution: 'ČHMÚ, pětileté mapy kvality ovzduší 2020–2024',
+        boundaryAttribution: 'ČÚZK, RÚIAN, okres Most (code 3508)',
+    },
+};
 let forecastFailure = false;
 const forecastUrls = [];
 const comparisonUrls = [];
 let historyRequests = 0;
 const mapUrls = [];
+const fiveYearUrls = [];
 
 globalThis.fetch = async url => {
     if (url.startsWith('/api/air-quality.php')) {
@@ -234,6 +293,17 @@ globalThis.fetch = async url => {
         const params = new URL(url, 'https://local').searchParams;
         selected.component.code = params.get('component');
         selected.type.code = params.get('type');
+        return { ok: true, status: 200, json: async () => selected };
+    }
+    if (url.startsWith('/api/air-quality-five-year.php')) {
+        fiveYearUrls.push(url);
+        const selected = structuredClone(fiveYear);
+        selected.component.code = new URL(url, 'https://local').searchParams.get('component');
+        if (selected.component.code === 'SO2_24h') {
+            selected.component.label = 'SO₂ · 24hodinová vrstva';
+            selected.layer.code = '24h';
+            selected.decimals = 0;
+        }
         return { ok: true, status: 200, json: async () => selected };
     }
     forecastUrls.push(url);
@@ -305,6 +375,34 @@ assert.match(mapUrls[mapUrls.length - 1], /component=NO2&type=max1h$/);
 elements.get('air-quality-map-opacity').value = '40';
 elements.get('air-quality-map-opacity').events.get('input')();
 assert.equal(displayedMap.opacity, 0.4);
+
+elements.get('air-quality-map-product').value = 'five-year';
+elements.get('air-quality-map-product').events.get('change')();
+await settle();
+assert.equal(fiveYearUrls.length, 1);
+assert.match(fiveYearUrls[0], /component=PM10$/);
+assert.equal(elements.get('air-quality-map-operational-controls').hidden, true);
+assert.equal(elements.get('air-quality-map-five-year-controls').hidden, false);
+assert.match(elements.get('air-quality-map-status').textContent, /2020–2024.*486|2020–2024.*2/);
+assert.match(elements.get('air-quality-map-source').textContent, /hraniční buňky nejsou oříznuty/);
+assert.equal(elements.get('air-quality-map-legend').children.length, 6);
+assert.equal(createdFiveYearLayers[0].children[0].popup.children[1].textContent, '10,0 µg/m³');
+assert.equal(createdFiveYearLayers[0].options.style(createdFiveYearLayers[0].data.features[1]).fillColor, '#808080');
+elements.get('air-quality-map-opacity').events.get('input')();
+assert.equal(createdFiveYearLayers[0].currentStyle.fillOpacity, 0.4);
+
+elements.get('air-quality-map-five-year-component').value = 'SO2_24h';
+elements.get('air-quality-map-five-year-component').events.get('change')();
+await settle();
+assert.match(fiveYearUrls[fiveYearUrls.length - 1], /component=SO2_24h$/);
+assert.match(elements.get('air-quality-map-status').textContent, /24hodinová vrstva/);
+
+elements.get('air-quality-map-product').value = 'operational';
+elements.get('air-quality-map-product').events.get('change')();
+await settle();
+assert.equal(mapUrls.length, 4);
+assert.equal(createdFiveYearLayers[2].removed, true);
+assert.equal(elements.get('air-quality-map-five-year-controls').hidden, true);
 
 elements.get('air-quality-forecast-horizon').value = '24';
 elements.get('air-quality-forecast-horizon').events.get('change')();

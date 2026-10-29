@@ -37,8 +37,12 @@ let historyPayload = null;
 let historyRequest = 0;
 let historyChart = null;
 const mapUi = mapPanel ? {
+    product: document.getElementById('air-quality-map-product'),
+    operationalControls: document.getElementById('air-quality-map-operational-controls'),
+    fiveYearControls: document.getElementById('air-quality-map-five-year-controls'),
     component: document.getElementById('air-quality-map-component'),
     type: document.getElementById('air-quality-map-type'),
+    fiveYearComponent: document.getElementById('air-quality-map-five-year-component'),
     opacity: document.getElementById('air-quality-map-opacity'),
     opacityValue: document.getElementById('air-quality-map-opacity-value'),
     map: document.getElementById('air-quality-map'),
@@ -61,6 +65,9 @@ let mapInstance = null;
 let mapOverlay = null;
 let mapPayload = null;
 let mapRequest = 0;
+let fiveYearRequest = 0;
+let fiveYearGridLayer = null;
+let fiveYearBoundaryLayer = null;
 const pollutantLabels = { PM10: 'PM10', O3: 'O₃', SO2: 'SO₂', NO2: 'NO₂' };
 const eventLabels = { 'smogová situace': 'Smogová situace', regulace: 'Regulace', varování: 'Varování' };
 const historyDateFormat = new Intl.DateTimeFormat('cs-CZ', {
@@ -380,8 +387,122 @@ function setupAirQualityMap() {
     mapInstance.attributionControl.addAttribution('Data mapy: ČHMÚ');
 }
 
+function clearFiveYearMap() {
+    if (fiveYearGridLayer) fiveYearGridLayer.remove();
+    if (fiveYearBoundaryLayer) fiveYearBoundaryLayer.remove();
+    fiveYearGridLayer = null;
+    fiveYearBoundaryLayer = null;
+}
+
+function renderFiveYearLegend(payload) {
+    mapUi.legendDescription.textContent = `${payload.component.label} · ${payload.unit}. ${payload.legend.method}`;
+    mapUi.legend.replaceChildren();
+    for (const interval of payload.legend.intervals) {
+        const entry = document.createElement('li');
+        const swatch = document.createElement('span');
+        swatch.className = 'air-quality-map-legend-swatch';
+        swatch.style.backgroundColor = interval.color;
+        swatch.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = `${formatNumber(interval.min, 2)}–${formatNumber(interval.max, 2)} ${payload.unit}`;
+        entry.append(swatch, label);
+        mapUi.legend.append(entry);
+    }
+    if (payload.statistics.missing > 0) {
+        const entry = document.createElement('li');
+        const swatch = document.createElement('span');
+        swatch.className = 'air-quality-map-legend-swatch';
+        swatch.style.backgroundColor = '#808080';
+        swatch.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = `Bez hodnoty (${payload.statistics.missing})`;
+        entry.append(swatch, label);
+        mapUi.legend.append(entry);
+    }
+}
+
+function renderFiveYearMap(payload) {
+    mapPayload = null;
+    mapOverlay?.remove();
+    mapOverlay = null;
+    clearFiveYearMap();
+    const minimum = payload.legend.minimum;
+    const range = payload.legend.maximum - minimum;
+    const opacity = Number(mapUi.opacity.value) / 100;
+    fiveYearGridLayer = globalThis.L.geoJSON(payload.map, {
+        style: feature => {
+            const value = feature.properties.value;
+            const interval = value === null
+                ? null
+                : Math.min(payload.legend.intervals.length - 1,
+                    Math.floor((value - minimum) / (range || 1) * payload.legend.intervals.length));
+            return {
+                color: '#ffffff',
+                weight: 0.35,
+                fillColor: interval === null ? '#808080' : payload.legend.intervals[interval].color,
+                fillOpacity: opacity,
+            };
+        },
+        onEachFeature: (feature, layer) => {
+            const content = document.createElement('div');
+            const title = document.createElement('strong');
+            title.textContent = payload.component.label;
+            const value = document.createElement('p');
+            value.className = 'mb-0';
+            value.textContent = feature.properties.value === null
+                ? 'Bez dostupné hodnoty'
+                : `${formatNumber(feature.properties.value, payload.decimals)} ${payload.unit}`;
+            const grid = document.createElement('small');
+            grid.textContent = `ČHMÚ grid ${feature.properties.gridId}`;
+            content.append(title, value, grid);
+            layer.bindPopup(content);
+        },
+    }).addTo(mapInstance);
+    fiveYearBoundaryLayer = globalThis.L.geoJSON(payload.boundary, {
+        style: { color: '#202040', weight: 2, fillOpacity: 0, interactive: false },
+    }).addTo(mapInstance);
+    mapInstance.fitBounds(fiveYearBoundaryLayer.getBounds(), { padding: [18, 18] });
+    mapInstance.invalidateSize();
+
+    mapUi.status.textContent = `${payload.component.label} · období ${payload.period} · okres Most · `
+        + `${payload.statistics.values} z ${payload.statistics.gridCells} buněk s hodnotou `
+        + `(${payload.unit}).`;
+    renderFiveYearLegend(payload);
+    mapUi.source.textContent = `${payload.meta.attribution}; vydáno ${payload.meta.sourcePublishedAt}; `
+        + `výřez vytvořen ${formatTime(payload.meta.generatedAt, 'datetime')}. `
+        + `Buňky 1 × 1 km jsou vybrány podle středu v hranici okresu; hraniční buňky nejsou oříznuty. `
+        + `Zdroj hranice: ${payload.meta.boundaryAttribution}.`;
+    setMessage(mapUi.warning, '');
+}
+
+async function loadFiveYearMap() {
+    if (!mapUi) return;
+    const requestId = ++fiveYearRequest;
+    mapRequest++;
+    mapPanel.setAttribute('aria-busy', 'true');
+    mapUi.status.textContent = 'Načítám předzpracované pětileté hodnoty ČHMÚ…';
+    setMessage(mapUi.error, '');
+    setMessage(mapUi.warning, '');
+    try {
+        const query = new URLSearchParams({ component: mapUi.fiveYearComponent.value });
+        const payload = await fetchJson(`${mapPanel.dataset.apiFiveYear}?${query.toString()}`, 15000);
+        if (requestId !== fiveYearRequest || mapUi.product.value !== 'five-year') return;
+        setupAirQualityMap();
+        renderFiveYearMap(payload);
+    } catch (exception) {
+        if (requestId === fiveYearRequest) {
+            setMessage(mapUi.error, exception.message || 'Pětiletou mapu ČHMÚ se nepodařilo načíst.');
+            mapUi.status.textContent = 'Pětiletá mapa není dostupná.';
+        }
+    } finally {
+        if (requestId === fiveYearRequest) mapPanel.setAttribute('aria-busy', 'false');
+    }
+}
+
 function renderAirQualityMap(payload) {
     mapPayload = payload;
+    clearFiveYearMap();
+    mapInstance.setView([50.51039, 13.64525], 8);
     mapUi.status.textContent = `${payload.component.label} · ${payload.type.label} · `
         + `${formatTime(payload.period.start, 'datetime')}–${formatTime(payload.period.end, 'datetime')} · `
         + `stáří ${Math.floor(payload.period.ageSeconds / 3600)} h `
@@ -410,6 +531,7 @@ function renderAirQualityMap(payload) {
 
 async function loadAirQualityMap() {
     if (!mapUi) return;
+    fiveYearRequest++;
     const requestId = ++mapRequest;
     mapPanel.setAttribute('aria-busy', 'true');
     mapUi.status.textContent = 'Načítám operativní mapu ČHMÚ…';
@@ -492,7 +614,10 @@ function activateTab(index, focus = false) {
     });
     if (focus) tabs[index].button.focus();
     if (tabs[index].panel === historyPanel && !historyPayload) loadHistory();
-    if (tabs[index].panel === mapPanel && !mapPayload) loadAirQualityMap();
+    if (tabs[index].panel === mapPanel) {
+        if (mapUi.product.value === 'five-year') loadFiveYearMap();
+        else if (!mapPayload) loadAirQualityMap();
+    }
 }
 
 tabs.forEach((tab, index) => {
@@ -517,14 +642,25 @@ if (historyUi) {
     document.addEventListener('weather:themechange', () => historyPayload && renderHistory());
 }
 if (mapUi) {
+    mapUi.product.addEventListener('change', () => {
+        const showFiveYear = mapUi.product.value === 'five-year';
+        mapUi.operationalControls.hidden = showFiveYear;
+        mapUi.fiveYearControls.hidden = !showFiveYear;
+        if (showFiveYear) loadFiveYearMap();
+        else loadAirQualityMap();
+    });
     mapUi.component.addEventListener('change', () => {
         updateMapTypes();
         loadAirQualityMap();
     });
     mapUi.type.addEventListener('change', loadAirQualityMap);
+    mapUi.fiveYearComponent.addEventListener('change', loadFiveYearMap);
     mapUi.opacity.addEventListener('input', () => {
         mapUi.opacityValue.textContent = `${mapUi.opacity.value} %`;
         if (mapOverlay) mapOverlay.setOpacity(Number(mapUi.opacity.value) / 100);
+        if (fiveYearGridLayer) {
+            fiveYearGridLayer.setStyle({ fillOpacity: Number(mapUi.opacity.value) / 100 });
+        }
     });
     updateMapTypes();
     window.addEventListener('resize', () => mapInstance && mapInstance.invalidateSize());

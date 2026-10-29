@@ -8,7 +8,8 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku kvality ovzduší s měřením Most (UMOM), srovnáním okolní stanice,
-> předpovědí, historií SVRS Ústeckého kraje a operativní mapou ČHMÚ (fáze 9D). Stránka historického Klima Kopisty
+> předpovědí, historií SVRS Ústeckého kraje, operativní mapou a pětiletým
+> gridem ČHMÚ 2020–2024 pro okres Most (fáze 9E). Stránka historického Klima Kopisty
 > nyní odděluje oficiální normály ČHMÚ 1991–2020 od vlastního výpočtu z archivu.
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
@@ -41,6 +42,7 @@ Prohlížeč ──GET──► public/index.php, history.php, stats.php, analyt
                   public/api/air-quality.php ─┤
                   public/api/air-quality-history.php ─┤
                   public/api/air-quality-forecast.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
+                  public/api/air-quality-five-year.php ─► předzpracovaný data/air_quality/most-2020-2024.json
                                                ─► app/Weather/Services (logika)
                                                ─► app/Weather/Repositories (SQL)
                                                ─► app/Infrastructure/Database (PDO) ─► původní config.php + DB
@@ -83,6 +85,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   ├── Services/AirQualityService.php           normalizace ovzduší, kvality hodnot a metadat ČHMÚ
 │   ├── Services/AirQualityHistoryService.php    validace a časová osa úředních událostí SVRS
 │   ├── Services/AirQualityForecastService.php   boxplotová předpověď ovzduší pro ORP Most
+│   ├── Services/AirQualityFiveYearMapService.php výběr hodnot z verzovaného GIS výřezu
 │   ├── Gateways/ChmiGateway.php                 allowlist HTTPS zdrojů ČHMÚ, limity, timeout a cache
 │       ├── Services/WindRoseService.php             větrná růžice (16 směrů × třídy rychlosti)
 │       ├── Support/Meteo.php                        směr větru, pocitová teplota, UV, tendence, Beaufort, odhad stavu
@@ -103,6 +106,8 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── air-quality.php            měření UMOM + srovnatelná blízká stanice (JSON)
 │   │   ├── air-quality-history.php    historická SVRS data pro Ústecký kraj (JSON)
 │   │   ├── air-quality-forecast.php   modelová hodinová předpověď pro ORP Most (JSON)
+│   │   ├── air-quality-map.php        operativní mapy kvality ovzduší ČHMÚ (JSON)
+│   │   ├── air-quality-five-year.php  pětiletá GIS mapa pro okres Most (JSON)
 │   │   └── windrose.php              větrná růžice za posledních N hodin (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
@@ -124,6 +129,8 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   ├── pages/stats.php               obsah stránky „Statistiky a rekordy“
 │   └── pages/analytics.php           obsah stránky „Analytika“
 ├── bin/check-connection.php          kontrola DB z příkazové řádky (ne z webu)
+├── data/air_quality/                 verzovaný výřez ČHMÚ a hranice okresu Most
+├── tools/air_quality/                offline GIS výřez (Python; mimo webové požadavky)
 ├── storage/cache/aggregates/         soubory cache (vytváří aplikace, lze kdykoli smazat)
 ├── tests/                            testy (spouští se lokálně, na hosting se nenahrávají)
 └── docs/architecture/                analýza a návrh (na hosting se nenahrávají)
@@ -712,6 +719,49 @@ Katalog a archivy mají pětiminutovou cache, statická metadata týdenní.
 ZIP se čte bez extrakce, s omezením velikosti; hosting potřebuje PHP
 rozšíření `ZipArchive`. Mapa je připisována ČHMÚ pod licencí [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Při použití podkladu OpenStreetMap se provozovateli dlaždic předává IP adresa.
+
+### `api/air-quality-five-year.php?component=PM10`
+
+Pětileté mapy používají oficiální archiv ČHMÚ za období **2020–2024**
+(vydání katalogu 26. 11. 2025). Mimo webový požadavek je z něj vytvořen
+verzovaný výřez **okresu Most**: 486 buněk gridu 1 × 1 km. Buňka se zařadí,
+pokud její střed leží uvnitř okresu; hraniční buňky se neořezávají a mohou
+částečně přesahovat správní hranici. Souřadnice jsou v EPSG:4326, výchozí
+data jsou v EPSG:32633. Stránka zpřístupňuje všech devět ročních vrstev a
+samostatnou 24hodinovou vrstvu SO₂ a PM10. Tyto dvě statistiky PM10 nejsou
+zaměnitelné. Zobrazená desetinná přesnost odpovídá hodnotám zdroje: jedna
+desetinná pro roční vrstvu, celá čísla pro 24hodinovou vrstvu.
+
+Legenda používá pět stejně širokých intervalů z rozsahu právě zvolené látky
+v tomto výřezu. Nejde o stupnici limitů ani srovnání mezi látkami. Kliknutí
+na buňku ukáže hodnotu v µg/m³ a její ČHMÚ grid ID. Chybějící hodnoty se
+zobrazují zvlášť. Pětiletá prostorová vrstva je plošný produkt ČHMÚ, nikoli
+měření stanice UMOM ani časová řada; sousední pětiletá období se překrývají.
+
+Výstup a zdrojové hashe jsou v
+[`data/air_quality/most-2020-2024.json`](data/air_quality/most-2020-2024.json).
+Přesný vstupní archiv se do repozitáře nekopíruje; výřez lze znovu vytvořit
+offline pomocí Pythonu 3.10+ a knihoven v
+[`tools/air_quality/requirements.txt`](tools/air_quality/requirements.txt):
+
+```powershell
+py -3.10 -m pip install -r tools/air_quality/requirements.txt
+curl.exe --fail --location "https://opendata.chmi.cz/air_quality/products/5year_avg/sit1000_5lprum_20_24_CR_UTM.zip" --output "$env:TEMP\sit1000_5lprum_20_24_CR_UTM.zip"
+py -3.10 tools/air_quality/build_five_year_extract.py `
+  --archive "$env:TEMP\sit1000_5lprum_20_24_CR_UTM.zip" `
+  --boundary data/air_quality/okres-most-ruian.geojson `
+  --output data/air_quality/most-2020-2024.json
+```
+
+Generátor bez `--generated-at` zaznamená aktuální čas UTC; pro bitově
+shodný výstup použít čas z `metadata.generatedAt` v existujícím souboru.
+Hranice je z ČÚZK RÚIAN, okres Most (kód 3508), pod licencí
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Při distribuci
+uvést ČHMÚ jako zdroj imisních dat a ČÚZK/RÚIAN jako zdroj hranice.
+Aktualizace produktu vyžaduje nový kontrolovaný výřez a změnu období či
+metadat; těžké shapefile se nikdy neparsují při načítání stránky.
+Při nasazení nahrát i `data/air_quality/most-2020-2024.json`; vstupní archiv,
+hranice a offline nástroje nejsou potřeba pro běžný provoz API.
 
 ### `api/comparison.php`
 

@@ -135,6 +135,8 @@ return static function (): int {
             && strpos($body, 'air-quality-history-tab') !== false
             && strpos($body, 'air-quality-history-events') !== false
             && strpos($body, 'air-quality-map-tab') !== false
+            && strpos($body, 'data-api-five-year="/api/air-quality-five-year.php"') !== false
+            && strpos($body, 'Pětiletá mapa · 2020–2024') !== false
             && strpos($body, 'leaflet@1.9.4') !== false, 'air page provides comparison, history, and map tabs');
         check($request('/api/air-quality.php', 'POST')[0] === 405, 'air quality api rejects non-GET');
         check($request('/api/air-quality.php?compare[]=LIT')[0] === 400
@@ -176,6 +178,27 @@ return static function (): int {
             && $request('/api/air-quality-map.php?url=other')[0] === 400, 'air map API rejects unsupported combinations and queries');
         check($request('/api/air-quality-map.php', 'POST')[0] === 405
             && $request('/assets/js/air-quality.js')[0] === 200, 'air map API method and frontend module');
+        [$status, $type, $body] = $request('/api/air-quality-five-year.php?component=PM10');
+        $fiveYear = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $fiveYear['period'] === '2020–2024'
+            && $fiveYear['component']['code'] === 'PM10'
+            && $fiveYear['layer']['code'] === 'annual'
+            && $fiveYear['decimals'] === 1
+            && $fiveYear['statistics']['gridCells'] === 486
+            && count($fiveYear['map']['features']) === 486,
+            'five-year API returns the preprocessed Most district grid');
+        [$status, , $body] = $request('/api/air-quality-five-year.php?component=SO2_24h');
+        $fiveYear24h = json_decode($body, true);
+        check($status === 200 && $fiveYear24h['layer']['code'] === '24h'
+            && $fiveYear24h['component']['label'] === 'SO₂ · 24hodinová vrstva'
+            && $fiveYear24h['decimals'] === 0,
+            'five-year API keeps 24-hour and annual products distinct');
+        check($request('/api/air-quality-five-year.php?component=invalid')[0] === 400
+            && $request('/api/air-quality-five-year.php?component[]=PM10')[0] === 400
+            && $request('/api/air-quality-five-year.php?url=other')[0] === 400
+            && $request('/api/air-quality-five-year.php', 'POST')[0] === 405,
+            'five-year API rejects unsupported components, query fields and methods');
         [$status, $type, $body] = $request('/comparison.php');
         check($status === 200 && strpos($body, 'data-api="/api/comparison.php"') !== false, 'comparison page and api wired');
         check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');

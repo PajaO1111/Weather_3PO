@@ -275,54 +275,83 @@ use OuBrix\Weather\Http\View;
         </p>
     </section>
     <section id="air-quality-map-panel" role="tabpanel" aria-labelledby="air-quality-map-tab"
-             tabindex="0" hidden data-api="<?= View::e($baseUrl) ?>/api/air-quality-map.php">
-        <h2 class="h5">Operativní mapa kvality ovzduší ČHMÚ</h2>
+             tabindex="0" hidden data-api="<?= View::e($baseUrl) ?>/api/air-quality-map.php"
+             data-api-five-year="<?= View::e($baseUrl) ?>/api/air-quality-five-year.php">
+        <h2 class="h5">Mapy kvality ovzduší ČHMÚ</h2>
         <p class="text-body-secondary">
-            Plošná mapa vytvořená z operativních měření stanic a dalších podkladů; nejde o přímé měření
-            v každém místě ani o předpověď. Barvy označují intervaly z oficiální legendy ČHMÚ.
-            Mapa nepodporuje přesné číselné odečítání v bodě.
+            Operativní mapa je plošný odhad, nikoli přímé měření v každém místě. Pětiletá mapa
+            zobrazuje prostorovou síť ČHMÚ za roky 2020–2024; nejde o měření stanice UMOM.
         </p>
         <div class="row g-2 align-items-end mb-3">
             <div class="col-12 col-sm-6">
-                <label class="form-label" for="air-quality-map-component">Látka</label>
-                <select class="form-select" id="air-quality-map-component">
-                    <option value="PM10">PM10</option>
-                    <option value="PM2_5">PM2,5</option>
-                    <option value="NO2">NO₂</option>
-                    <option value="O3">O₃</option>
-                    <option value="SO2">SO₂</option>
+                <label class="form-label" for="air-quality-map-product">Datový produkt</label>
+                <select class="form-select" id="air-quality-map-product">
+                    <option value="operational">Operativní mapa</option>
+                    <option value="five-year">Pětiletá mapa · 2020–2024</option>
                 </select>
             </div>
-            <div class="col-12 col-sm-6">
-                <label class="form-label" for="air-quality-map-type">Období / agregace</label>
-                <select class="form-select" id="air-quality-map-type">
-                    <option value="hours">Hodinový průměr</option>
-                </select>
+        </div>
+        <div id="air-quality-map-operational-controls">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-sm-6">
+                    <label class="form-label" for="air-quality-map-component">Látka</label>
+                    <select class="form-select" id="air-quality-map-component">
+                        <option value="PM10">PM10</option>
+                        <option value="PM2_5">PM2,5</option>
+                        <option value="NO2">NO₂</option>
+                        <option value="O3">O₃</option>
+                        <option value="SO2">SO₂</option>
+                    </select>
+                </div>
+                <div class="col-12 col-sm-6">
+                    <label class="form-label" for="air-quality-map-type">Období / agregace</label>
+                    <select class="form-select" id="air-quality-map-type">
+                        <option value="hours">Hodinový průměr</option>
+                    </select>
+                </div>
             </div>
+        </div>
+        <div id="air-quality-map-five-year-controls" hidden>
+            <label class="form-label" for="air-quality-map-five-year-component">Látka a statistika</label>
+            <select class="form-select mb-3" id="air-quality-map-five-year-component">
+                <option value="NO2">NO₂ · roční průměr</option>
+                <option value="BZN">Benzen · roční průměr</option>
+                <option value="BaP">Benzo[a]pyren · roční průměr</option>
+                <option value="PM10" selected>PM10 · roční průměr</option>
+                <option value="PM2_5">PM2,5 · roční průměr</option>
+                <option value="As">Arsen · roční průměr</option>
+                <option value="Cd">Kadmium · roční průměr</option>
+                <option value="Ni">Nikl · roční průměr</option>
+                <option value="Pb">Olovo · roční průměr</option>
+                <option value="SO2_24h">SO₂ · 24hodinová vrstva</option>
+                <option value="PM10_24h">PM10 · 24hodinová vrstva</option>
+            </select>
         </div>
         <div class="alert alert-danger d-none" id="air-quality-map-error" role="alert"></div>
         <div class="alert alert-warning d-none" id="air-quality-map-warning" role="status"></div>
         <p class="small text-body-secondary" id="air-quality-map-status" role="status">Mapa se načte při otevření této záložky.</p>
         <label class="form-label" for="air-quality-map-opacity">
-            Krytí vrstvy: <output id="air-quality-map-opacity-value">75 %</output>
+            Průhlednost vrstvy: <output id="air-quality-map-opacity-value">75 %</output>
         </label>
         <input class="form-range" id="air-quality-map-opacity" type="range" min="0" max="100" step="5" value="75">
         <div id="air-quality-map" class="air-quality-map border rounded mb-3"
-             role="region" aria-label="Operativní mapa kvality ovzduší ČHMÚ pro Českou republiku"></div>
+             role="region" aria-label="Mapa kvality ovzduší ČHMÚ"></div>
         <section class="mb-3" aria-labelledby="air-quality-map-legend-title">
-            <h3 class="h6" id="air-quality-map-legend-title">Legenda ČHMÚ</h3>
+            <h3 class="h6" id="air-quality-map-legend-title">Legenda mapy</h3>
             <p class="small text-body-secondary" id="air-quality-map-legend-description"></p>
             <ul class="air-quality-map-legend list-unstyled d-flex flex-wrap gap-3 mb-0"
                 id="air-quality-map-legend" aria-label="Barevná legenda mapy"></ul>
         </section>
         <p class="small text-body-secondary" id="air-quality-map-source"></p>
         <p class="small text-body-secondary">
-            Statická metadata uvádějí krok vstupního gridu 100 m, samotné PNG má nižší rozlišení.
-            Rozlišení zobrazeného rastru a jeho rozsah jsou uvedeny u zdroje; nejde o přesnost měření.
             Zdroj: <a href="https://opendata.chmi.cz/air_quality/now/maps/" target="_blank" rel="noopener noreferrer">
-                operativní mapy kvality ovzduší ČHMÚ
-            </a>, licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
-                            rel="noopener noreferrer">CC BY 4.0</a>.
+                operativní mapy
+            </a> a <a href="https://opendata.chmi.cz/air_quality/products/5year_avg/" target="_blank"
+                      rel="noopener noreferrer">pětileté produkty ČHMÚ</a>.
+            Hranice okresu: <a href="https://ags.cuzk.gov.cz/arcgis/rest/services/RUIAN/MapServer/15"
+                               target="_blank" rel="noopener noreferrer">ČÚZK · RÚIAN</a>
+            (licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
+                        rel="noopener noreferrer">CC BY 4.0</a>).
             Podklad OpenStreetMap předává při načítání mapy IP adresu provozovateli dlaždic.
         </p>
     </section>
