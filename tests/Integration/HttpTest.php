@@ -246,6 +246,30 @@ return static function (): int {
         check($request('/api/climate.php?year=1800')[0] === 400
             && $request('/api/climate.php?year=' . gmdate('Y'))[0] === 400, 'climate rejects unpublished and current year');
         check($request('/assets/js/climate.js')[0] === 200, 'climate module served');
+        [$status, $type, $body] = $request('/phenology.php');
+        check($status === 200 && strpos($type, 'text/html') === 0
+            && strpos($body, 'data-api="/api/phenology.php"') !== false
+            && strpos($body, 'Fenologický kalendář ČHMÚ') !== false, 'phenology page wired');
+        check(strpos($body, 'js/phenology.js') !== false
+            && strpos($body, 'i-phenology') !== false
+            && strpos($body, 'ČHMÚ – fenologická pozorování') !== false
+            && strpos($body, 'Nadmořská výška') !== false, 'phenology module, attribution and station comparison');
+        [$status, $type, $body] = $request('/api/phenology.php');
+        $phenology = json_decode($body, true);
+        check($status === 200 && strpos($type, 'application/json') === 0
+            && $phenology['selection']['station']['code'] === 'U1DOKS31'
+            && $phenology['selection']['phase']['code'] === 'PK50', 'phenology API defaults to Doksany and flowering phase');
+        check($phenology['series']['medianCalendarDay'] == 100
+            && $phenology['comparison']['commonYears'] == [2014, 2016],
+            'phenology API excludes 444 and compares shared years: ' . json_encode([
+                'median' => $phenology['series']['medianCalendarDay'] ?? null,
+                'years' => $phenology['comparison']['commonYears'] ?? null,
+            ]));
+        check($request('/api/phenology.php?station[]=U1DOKS31')[0] === 400
+            && $request('/api/phenology.php?year=2010')[0] === 400
+            && $request('/api/phenology.php?extra=1')[0] === 400
+            && $request('/api/phenology.php', 'POST')[0] === 405, 'phenology API rejects invalid query and method');
+        check($request('/assets/js/phenology.js')[0] === 200, 'phenology module served');
         [$status, $type, $body] = $request('/forecast.php');
         check($status === 200 && strpos($type, 'text/html') === 0
             && strpos($body, 'data-api="/api/forecast.php"') !== false, 'forecast page wired');
@@ -311,7 +335,7 @@ return static function (): int {
         ], JSON_THROW_ON_ERROR));
         [$status, , $body] = $request('/api/radar.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
-        return 88;
+        return 94;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {

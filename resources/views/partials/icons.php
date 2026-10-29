@@ -3,7 +3,7 @@
  * SVG sprite ikon navigace (24×24, obrys v barvě textu – currentColor).
  *
  * Použití: <svg class="wx-icon" aria-hidden="true"><use href="#i-radar"></use></svg>
- * Ikony hydrology, phenology a pollen jsou připravené pro budoucí stránky (9G–9K).
+ * Ikona fenologie se používá na stránce 9H; pylová ikona zůstává připravená pro 9I.
  */
 ?>
 <svg xmlns="http://www.w3.org/2000/svg" class="wx-icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">

@@ -49,6 +49,8 @@ $database->exec('CREATE TABLE weather_yearly (
     temp_sample_count INTEGER NOT NULL, wind_sample_count INTEGER NOT NULL, calculated_at TEXT NOT NULL,
     PRIMARY KEY (station_id, year_num))');
 OuBrix\Weather\Infrastructure\Database::useConnection($database);
+require_once __DIR__ . '/PhenologyFixtures.php';
+PhenologyFixtures::seed($database);
 
 $scripts = ['/' => '/index.php', '/index.php' => '/index.php', '/api/current.php' => '/api/current.php',
     '/api/observations.php' => '/api/observations.php', '/api/health.php' => '/api/health.php',
@@ -61,6 +63,7 @@ $scripts = ['/' => '/index.php', '/index.php' => '/index.php', '/api/current.php
     '/api/air-quality-five-year.php' => '/api/air-quality-five-year.php',
     '/comparison.php' => '/comparison.php', '/api/comparison.php' => '/api/comparison.php',
     '/climate.php' => '/climate.php', '/api/climate.php' => '/api/climate.php',
+    '/phenology.php' => '/phenology.php', '/api/phenology.php' => '/api/phenology.php',
     '/forecast.php' => '/forecast.php', '/api/forecast.php' => '/api/forecast.php',
     '/warnings.php' => '/warnings.php', '/api/warnings.php' => '/api/warnings.php',
     '/radar.php' => '/radar.php', '/api/radar.php' => '/api/radar.php',

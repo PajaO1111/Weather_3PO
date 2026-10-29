@@ -14,6 +14,8 @@ beze změny původní CRON (`fetch_weather*.php`). Původní stránky
 > Fáze 6 přidala textovou předpověď a mobilní rozbalovací menu; fáze 7 přidává
 > výstrahy ČHMÚ pro ORP Most.
 > Fáze 8 přidává mapu radaru MAX_Z_MASK a hodinového odhadu MERGE.
+> Fenologie (9H) je připravena jako samostatná stránka nad historickými daty ČHMÚ;
+> nasazení vyžaduje novou migraci a jednorázový import CSV.
 > Další plán viz [Plán rozšíření](#plán-rozšíření).
 
 ## Požadavky
@@ -43,6 +45,7 @@ Prohlížeč ──GET──► public/index.php, history.php, stats.php, analyt
                   public/api/air-quality-history.php ─┤
                   public/api/air-quality-forecast.php ─┘ ─► app/Weather/Gateways/ChmiGateway (pevné HTTPS zdroje, cache)
                   public/api/air-quality-five-year.php ─► předzpracovaný data/air_quality/most-2020-2024.json
+                  public/api/phenology.php ─► app/Weather/Services/PhenologyService ─► tabulky phenology_*
                                                ─► app/Weather/Services (logika)
                                                ─► app/Weather/Repositories (SQL)
                                                ─► app/Infrastructure/Database (PDO) ─► původní config.php + DB
@@ -92,6 +95,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │       └── Support/Astro.php                        východ/západ Slunce, výška Slunce, fáze Měsíce
 ├── public/                           JEDINÁ veřejná složka
 │   ├── index.php                     stránka „Aktuálně“
+│   ├── phenology.php                 historický fenologický kalendář ČHMÚ
 │   ├── history.php                   stránka „Historie“
 │   ├── stats.php                     stránka „Statistiky a rekordy“
 │   ├── analytics.php                 stránka „Analytika“ (srážky za 30/60/90 dní)
@@ -108,6 +112,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   │   ├── air-quality-forecast.php   modelová hodinová předpověď pro ORP Most (JSON)
 │   │   ├── air-quality-map.php        operativní mapy kvality ovzduší ČHMÚ (JSON)
 │   │   ├── air-quality-five-year.php  pětiletá GIS mapa pro okres Most (JSON)
+│   │   ├── phenology.php             stanice, druhy, fenofáze, roky a srovnání (JSON)
 │   │   └── windrose.php              větrná růžice za posledních N hodin / zvolené dny (JSON)
 │   └── assets/
 │       ├── css/app.css               vlastní styly (světlý/tmavý motiv)
@@ -120,6 +125,7 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │           ├── stats.js              stránka „Statistiky“: výběr roku, graf, tabulka, žebříčky rekordů
 │           ├── analytics.js          stránka „Analytika“: srážky, období a úplnost dat
 │           ├── air-quality.js        měření, srovnání, předpověď a SVRS historie
+│           ├── phenology.js          kalendář, meziroční řada a srovnání výšek
 │           └── week.js               paprskový graf 7 dní (24 h × den) a větrná růžice
 ├── resources/views/
 │   ├── layouts/main.php              HTML kostra, knihovny
@@ -130,6 +136,9 @@ Weather/                              (/www/domains/oubrix.eu/Weather)
 │   └── pages/analytics.php           obsah stránky „Analytika“
 ├── bin/check-connection.php          kontrola DB z příkazové řádky (ne z webu)
 ├── data/air_quality/                 verzovaný výřez ČHMÚ a hranice okresu Most
+├── data/fenology/                    zdrojová CSV ČHMÚ pro roky 2014–2025 (~4,9 MB)
+├── database/migrations/003_phenology.sql nové tabulky fenologie
+├── bin/import-phenology.php           atomický opakovatelný import CSV do DB
 ├── tools/air_quality/                offline GIS výřez (Python; mimo webové požadavky)
 ├── storage/cache/aggregates/         soubory cache (vytváří aplikace, lze kdykoli smazat)
 ├── tests/                            testy (spouští se lokálně, na hosting se nenahrávají)
@@ -168,6 +177,40 @@ Výsledky jsou totožné s výpočtem přímo z DB (ověřeno testem).
   a vše funguje dál, jen bez zrychlení.
 
 ## Nasazení na hosting
+
+### Fenologie (fáze 9H)
+
+Veřejná stránka [public/phenology.php](public/phenology.php) zobrazuje
+historická pozorování ČHMÚ pro dostupné stanice, dřeviny/byliny, fenofáze
+a roky. Výchozí stanicí jsou Doksany. Stránka uvádí výšku, souřadnice,
+vzdálenost od Mostu, dostupné roky a zdroj dat.
+
+Před prvním použitím v databázi, která už má aplikované migrace 001 a 002,
+spusťte z kořene projektu:
+
+```powershell
+# Zálohujte databázi; tato migrace přidává pouze nové tabulky phenology_*.
+mysql --host=HOST --user=UZIVATEL --password NAZEV_DATABAZE < database/migrations/003_phenology.sql
+php bin/import-phenology.php
+```
+
+Import načte 76 CSV souborů z `data/fenology/` (19 dřevin, 18 bylin,
+stanice a číselníky). Výchozí snapshot obsahuje data 2014–2025. Aktualizaci
+proveďte výměnou souborů za novější export ČHMÚ ve stejné struktuře
+`wood_species/` a `herbs/`, následovanou opětovným spuštěním importéru.
+Import probíhá v transakci, lze jej bezpečně opakovat a přestavuje pouze
+fenologické tabulky; původní meteorologické tabulky nemění.
+
+Zvláštní kód `444` se ukládá jako „fenofáze nenastala“; chybějící řádek
+zůstává chybějícím záznamem. Rozporné duplicity zůstávají viditelné jako
+samostatný stav a nezapočítají se do grafů ani mediánů. Tento snapshot má
+dvě takové rozporné kombinace. Shodné duplicitní řádky se uchovají s počtem
+zdrojových hodnot. Výstup importéru shrnuje soubory, kombinace a konflikty.
+
+API [public/api/phenology.php](public/api/phenology.php) vrací dostupné
+filtry i grafová data. Na webu je viditelně uveden zdroj
+[ČHMÚ – fenologická pozorování](https://opendata.chmi.cz/meteorology/phenology/).
+Roční plánovaný běh importu/cronu a provozní předání zůstávají součástí 9J.
 
 ### Fáze 8 – Radar ČHMÚ
 
@@ -799,6 +842,20 @@ Metadata se obnovují po UTC datech (TTL 24 h), měření po 15 minutách.
 Hodnoty neznámé kvality mohou způsobit prázdnou řadu i při dostupném souboru;
 stránka tento stav vysvětluje. Srážky a vítr nejsou do této první verze
 srovnání zahrnuté.
+
+### `api/phenology.php`
+
+Volitelné parametry: `station`, `species`, `phase`, `year` a `compare`.
+Bez parametrů API vrátí dostupné filtry a výchozí Doksany; stanice se řadí
+podle vzdálenosti od Mostu. `compare` je seznam 2–4 kódů stanic oddělených
+čárkou a musí obsahovat základní stanici. Srovnávací mediány se počítají jen
+ze společných roků s pozorovaným nástupem. Nepodporované kombinace nebo
+parametry vrací 400; chybějící tabulky/databáze 503.
+
+V odpovědi jsou oddělené `observed`, `not_occurred` (kód 444), `missing`
+a `conflict` (rozporné zdrojové duplicity). Poslední dva stavy nemají datum
+a nevstupují do mediánů. Přestupné roky se na meziroční ose normalizují na
+365 dní.
 
 ## Lokální vývoj a testy
 

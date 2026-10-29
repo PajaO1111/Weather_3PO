@@ -391,9 +391,27 @@ main {
     height: 360px;
 }
 
+.phenology-chart {
+    height: 360px;
+}
+
+.phenology-station-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+}
+
+.phenology-station-options .form-check {
+    min-width: min(100%, 15rem);
+}
+
 @media (max-width: 575.98px) {
     .air-quality-forecast-chart {
         height: 320px;
+    }
+
+    .phenology-chart {
+        height: 300px;
     }
 }
 

@@ -22,6 +22,9 @@ $groups = [
         'stats' => ['stats.php', 'Statistiky a rekordy', 'i-stats'],
         'analytics' => ['analytics.php', 'Analytika srážek', 'i-analytics'],
     ],
+    'Příroda' => [
+        'phenology' => ['phenology.php', 'Fenologie', 'i-phenology'],
+    ],
     'ČHMÚ' => [
         'radar' => ['radar.php', 'Radar ČHMÚ', 'i-radar'],
         'warnings' => ['warnings.php', 'Výstrahy – Most', 'i-warnings'],
