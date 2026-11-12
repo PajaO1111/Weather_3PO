@@ -1,7 +1,8 @@
 <?php
 use OuBrix\Weather\Http\View;
 ?>
-<div id="phenology" data-api="<?= View::e($baseUrl) ?>/api/phenology.php" aria-busy="true">
+<div id="phenology" data-api="<?= View::e($baseUrl) ?>/api/phenology.php"
+     data-update-api="<?= View::e($baseUrl) ?>/api/phenology-update.php" aria-busy="true">
     <header class="mb-3">
         <h1 class="h4 mb-1">Fenologický kalendář ČHMÚ</h1>
         <p class="text-body-secondary mb-0">
@@ -98,6 +99,21 @@ use OuBrix\Weather\Http\View;
             </div>
         </div></section>
     </div>
+
+    <details class="card mb-3">
+        <summary class="card-body">Správce – kontrola nových dat ČHMÚ</summary>
+        <form id="phenology-update-form" class="card-body">
+            <p class="small text-body-secondary">
+                Kontrola porovná zdrojové soubory s DB. Změněnou sadu ověří a importuje.
+                Může trvat až tři minuty; stránku nezavírejte. Nejde o aktuální pylovou situaci.
+            </p>
+            <label class="form-label" for="phenology-password">Správcovské heslo</label>
+            <input id="phenology-password" class="form-control mb-2" type="password"
+                   autocomplete="current-password" maxlength="1024" required>
+            <button id="phenology-update-submit" class="btn btn-primary" type="submit">Zkontrolovat nová data</button>
+            <p id="phenology-update-status" class="mt-2 mb-0" role="status" aria-live="polite"></p>
+        </form>
+    </details>
 
     <section class="small text-body-secondary">
         <h2 class="h6">Jak data číst a co znamenají</h2>

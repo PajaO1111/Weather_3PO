@@ -1,11 +1,12 @@
 # OuBrix Weather – nový meteorologický portál
 
 Nová webová aplikace pro amatérskou meteostanici **IMOST71** (Most).
-Data **pouze čte** z původní tabulky `pws_observations`, kterou dál plní
-beze změny původní CRON (`fetch_weather*.php`). Původní stránky
+Data **pouze čte** z původní tabulky `pws_observations`. Nově je připraven přímý
+příjem ze Sencoru přes `station-upload.php` se zálohou z WU přes
+`fetch_weather2.php` (nasazení viz [Přímý příjem](#přímý-příjem-ze-sencoru-a-záloha-weather-underground)). Původní stránky
 (`history.php`, `history5.php`) zůstávají funkční.
 
-> Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připravena teplotní část fáze 4 – Kopisty.**
+> Stav: **Datový základ, Analytika srážek a Ovzduší ČHMÚ jsou nasazené části; nově je připraveno porovnání teploty, srážek a větru s Kopisty (fáze 4).**
 > Analytika nyní obsahuje srážkové úhrny 30/60/90 dní. ČHMÚ má samostatnou
 > stránku kvality ovzduší s měřením Most (UMOM), srovnáním okolní stanice,
 > předpovědí, historií SVRS Ústeckého kraje, operativní mapou a pětiletým
@@ -154,6 +155,7 @@ Složky `app/`, `config/`, `resources/`, `bin/`, `storage/` a `tests/` obsahují
 |---|---|---|
 | Přístup k DB, ID stanice | `/www/domains/config.php` | původní soubor, sdílí ho CRON |
 | Token CRONu `FETCH_TOKEN` | `/www/domains/config.php` | `fetch_weather2.php` se z webu spustí jen s `?token=` shodným s touto konstantou (jinak 403); CRON volá `https://oubrix.eu/fetch_weather2.php?token=…` |
+| Přímý příjem `STATION_UPLOAD_ID`, `STATION_UPLOAD_KEY` | `/www/domains/config.php` | vlastní ID/klíč pouze pro Sencor; nejde o API klíč ani Station Key WU, viz níže |
 | Veřejné nastavení | [config/app.php](config/app.php) | časové pásmo, hranice „neaktuálních“ dat, limity, CDN |
 | Jiná cesta ke config.php | proměnná prostředí `WEATHER_CONFIG` nebo `secret_config_path` v `config/app.php` | výchozí = dvě složky nad projektem |
 | Cache souhrnů | `aggregate_cache`, `aggregate_cache_dir` v `config/app.php` | viz níže; proměnná prostředí `WEATHER_CACHE_DIR` (`off` = vypnuto) má přednost |
@@ -211,6 +213,44 @@ API [public/api/phenology.php](public/api/phenology.php) vrací dostupné
 filtry i grafová data. Na webu je viditelně uveden zdroj
 [ČHMÚ – fenologická pozorování](https://opendata.chmi.cz/meteorology/phenology/).
 Roční plánovaný běh importu/cronu a provozní předání zůstávají součástí 9J.
+
+#### Ruční kontrola nových dat na webu
+
+Na stránce Fenologie rozbalte **Správce – kontrola nových dat ČHMÚ**.
+Tlačítko po zadání hesla odešle POST na `api/phenology-update.php`.
+Server zkontroluje seznamy souborů obou kategorií, stáhne celou sadu včetně
+metadat a porovná SHA-256 s tabulkou `phenology_import_files`.
+Při shodě zobrazí „Nová data nejsou“ a DB nepřepisuje. Změněnou sadu zpracuje
+stávající transakční importér, včetně oprav starších let. Nové soubory/druhy
+objeví ze seznamu ČHMÚ; chybějící dříve importovaný soubor znamená chybu,
+nikoli pokyn k mazání historie. Výpadek nebo neplatná data nejsou hlášeny
+jako „nová data nejsou“. Nejde o aktuální pozorování ani pylovou předpověď.
+
+**Jednorázové nastavení na hostingu:**
+
+1. Zvolte samostatné dlouhé správcovské heslo (nikoli heslo k DB).
+2. Na důvěryhodném počítači vytvořte jeho hash funkcí
+   `password_hash($heslo, PASSWORD_DEFAULT)`. Heslo neposílejte do chatu,
+   neukládejte do JavaScriptu ani do veřejného nastavení.
+3. Do stávajícího tajného `config.php` mimo webový projekt přidejte
+   `define('PHENOLOGY_ADMIN_PASSWORD_HASH', 'SEM_PATRI_HASH');`.
+   Bez této konstanty je aktualizace zakázaná.
+4. PHP musí mít zápis do `storage/` a odchozí HTTPS na `opendata.chmi.cz`.
+   Zachovejte ochranu `storage/.htaccess`. Používejte pouze HTTPS.
+
+Endpoint přijímá heslo v hlavičce `X-Phenology-Password` (percent-encoded
+kvůli podpoře diakritiky), nikoli v URL.
+Nepovoluje CORS; cizí HTML formulář nemůže tuto hlavičku přidat.
+Po pěti chybných heslech za pět minut blokuje další pokusy do vypršení okna.
+Souborový zámek nepovolí souběžné webové kontroly. CLI import nespouštějte
+současně s webovou aktualizací.
+
+Kontrola může trvat až tři minuty (hosting musí tak dlouhý PHP požadavek
+povolit). Pracovní CSV se mažou po dokončení; nemění dodaný lokální snapshot
+v `data/fenology/`. Při tvrdém ukončení PHP mohou zbýt podsložky `run-*`
+v `storage/phenology-update/`; odstraňte jen tyto pracovní kopie, až žádný
+import neběží. Při přerušení spojení mohl import doběhnout: obnovte stránku
+a ověřte datum importu před opakováním. Průběžný cron toto tlačítko nezavádí.
 
 ### Fáze 8 – Radar ČHMÚ
 
@@ -356,25 +396,24 @@ node tests\Frontend\WarningsTest.mjs
 node tests\Frontend\NavigationTest.mjs
 ```
 
-### Fáze 6 – Textová předpověď a kompaktní menu
+### Fáze 6 – Předpověď pro Most a kompaktní menu
 
 Nová stránka [public/forecast.php](public/forecast.php) je v rozbalovacím menu
-ve skupině **ČHMÚ → Předpověď ČHMÚ**. API [public/api/forecast.php](public/api/forecast.php)
-načítá pouze pevně povolený zdroj
-`https://data-provider.chmi.cz/api/data/txtf/meteo.today`, serverově přes
-`ChmiGateway`, s timeoutem 8 sekund, kontrolou TLS, bez přesměrování,
-limitem 1 MB a cache 30 minut. Nezávisí na DB ani tajných přístupových údajích.
-
-Parser vyžaduje seznam předpovědí s platným UTC časem vydání `sent`,
-začátkem `startTime` a neprázdnými textovými sekcemi `displayText`.
-Nadpisy `mainHeadline`/`headline` ani konec `endTime` nejsou povinné.
-Text se vykresluje bezpečně jako text, nikoli HTML. Uvádí se čas vydání,
-stáří, začátek a případně konec platnosti. Chybějící konec se neodhaduje
-z textu nebo názvu. Příliš budoucí vydání, neplatný interval nebo formát
-se odmítají; vydání starší než 24 hodin a ukončený interval jsou označeny.
-Limit 24 hodin je naše pravidlo stáří, nikoli oficiální doba platnosti.
-Při výpadku ČHMÚ může být použita jen výslovně označená stará cache.
-Obecná předpověď není označena jako lokální předpověď Mostu.
+ve skupině **ČHMÚ → Předpověď ČHMÚ**. API
+[public/api/forecast.php](public/api/forecast.php) načítá pevný zdroj
+`https://data-provider.chmi.cz/api/graphs/graf.meteogram/282` serverově přes
+`ChmiGateway`, s timeoutem 8 sekund, ověřením TLS, bez přesměrování, limitem
+250 kB a cache 30 minut. Nezávisí na DB ani tajných přístupových údajích.
+Parser ověřuje časovou posloupnost i rozsahy vstupních hodnot a odmítá
+neplatnou strukturu. Při výpadku ČHMÚ lze vrátit jen označenou starou cache.
+Stránka nyní zobrazuje hodinovou předpověď modelu ALADIN pro nejbližší výpočtový
+bod ČHMÚ u Mostu (bod 282, 280 m n. m.) v denních kartách. API ČHMÚ poskytuje
+hodinovou teplotu, srážky, sníh, vítr, tlak, oblačnost a kód ikony; denní minima,
+maxima a součty počítá aplikace. Srážky a sníh se zobrazují v mm, sníh jako vodní
+hodnota, nikoli výška pokrývky. Částečné dny jsou označeny. Jde o výstup jednoho
+modelu v nejbližším bodě, nikoli o kombinaci modelů ani předpověď pro každou část
+města. Odkaz na oficiální [meteogram ČHMÚ pro Most](https://www.chmi.cz/meteogram/282-most)
+zůstává dostupný pro detailní graf.
 
 API nepřijímá parametry oblasti/stanice: neplatný dotaz vrací 400, nepovolená
 metoda 405 a nedostupná/nevalidní data bez použitelné odpovědi 503.
@@ -470,7 +509,120 @@ spouštěné CRONem**, podle současné konfigurace do kořene webu
 `/www/domains/oubrix.eu/fetch_weather2.php`, nejen do adresáře `Weather/`.
 Změna se projeví u nového měření po dalším běhu CRONu; staré již zaokrouhlené
 záznamy v DB se neopravují ani nevytvářejí chybějící desetiny.
-DB schéma se nemění. Nepřenášet hesla ani měnit CRON token.
+Samotná úprava přesnosti DB schéma nemění. Nový přímý příjem ale vyžaduje
+migraci 004 popsanou níže. Nepřenášet hesla ani měnit CRON token.
+
+### Přímý příjem ze Sencoru a záloha Weather Underground
+
+Podrobný ověřený postup pro firmware 2.06, včetně přímé subdomény mimo CDN
+a diagnostiky, je v [Sencor_implementace.md](Sencor_implementace.md).
+
+Pro SWS 12500 s vlastním serverem je připraven příjem
+protokolu Weather Underground (parametry `ID`, `PASSWORD`, `dateutc`,
+`tempf`, `humidity`, `baromin` atd.). **Stanice sama odesílá na server**;
+web ani CRON se nepřipojuje do domácí sítě.
+
+- `station-upload.php` přijímá GET nebo formulářový POST, ověřuje samostatné
+  přihlašovací údaje a odpovídá `success` až po potvrzeném zápisu do DB.
+- `fetch_weather2.php` zůstává spouštěný CRONem každých 5 minut.
+  Pokud poslední platný přímý příjem **i čas jeho měření** jsou mladší
+  než 10 minut, loguje `SKIP reason=direct_fresh` a WU vůbec nevolá.
+  Po 10 minutách může použít čerstvé aktuální měření z WU.
+  Při pětiminutovém CRONu se záloha aktivuje při prvním běhu po uplynutí limitu.
+- Oba zdroje zapisují přes `weather-ingest.php` do původní tabulky.
+  Nové tabulky `weather_ingest_state` a `weather_ingest_slots` drží stav,
+  zdroj (`direct`/`wu`) a unikátní interval stanice + 5 minut UTC.
+  Databázový zámek stavu stanice a transakce chrání i souběžné požadavky.
+- Interval například 12:00:00–12:04:59 UTC obsahuje jediný spravovaný záznam.
+  Zůstává poslední přímé měření daného intervalu; starší a opakovaná přímá
+  měření jej nepřepíšou. Přímý příjem nahradí záložní záznam ve stejném
+  intervalu i při rozdílném čase. WU přímé měření nikdy nepřepíše.
+  Původní skutečný čas měření se nezahlazuje na začátek intervalu.
+- Chybné, neúplné a 10 nebo více minut staré zprávy neobnovují stav primárního
+  zdroje. Čas více než 2 minuty v budoucnosti je odmítnut.
+  `dateutc=now` znamená čas přijetí na serveru.
+  V takové zprávě nelze poznat, zda konzole opakuje staré hodnoty ze senzoru.
+  Minimem jsou venkovní teplota, vlhkost a tlak; chybějící volitelné veličiny
+  zůstávají NULL, nikoli nula. Nejde o zpětné doplňování historie.
+- Fahrenheit se převádí na °C, mph na km/h, inHg na hPa a srážky z palců na mm.
+  `dailyrainin` je denní čítač, nikoli součet zpráv; nuluje se podle stanice.
+  `rainin` se stejně jako v [komunitní integraci SWS 12500](https://github.com/schizza/SWS-12500-custom-component)
+  vyhodnocuje jako intenzita v in/h; před ostrým provozem porovnat s displejem,
+  protože obecný WU protokol
+  používá toto pole i pro úhrn za poslední hodinu. Pokud konkrétní firmware
+  posílá úhrn, nesmí se zaměnit za okamžitou intenzitu.
+  Metadata (místo, souřadnice, výška) se pro přímý příjem zachovají z posledního
+  záznamu stanice. Bez původních dat zůstanou NULL. Přímá měření nemají WU QC.
+- Staré duplicity se hromadně nemažou. Při prvním novém zápisu do intervalu
+  s existujícími daty se převezme poslední původní řádek; ostatní historické
+  řádky zůstanou. Pravidlo jednoho záznamu platí pro nově spravované intervaly.
+
+#### Nasazení
+
+1. Zálohovat DB a původní sběrný skript. Ověřit, že `pws_observations`
+   používá **InnoDB**; jiný engine přijímač odmítne. Spustit jednou
+   [004_weather_ingest.sql](database/migrations/004_weather_ingest.sql).
+   Migrace přidá dvě tabulky, ale nemění ani nemaže původní měření.
+2. Do **stejného kořene webu** `/www/domains/oubrix.eu/` nahrát společně
+   `station-upload.php`, `weather-ingest.php` a upravený `fetch_weather2.php`.
+   Nestačí je nahrát pouze do `Weather/`. Skripty načítají původní neveřejný
+   `/www/domains/config.php`; nemění se URL CRONu ani `FETCH_TOKEN`.
+3. V neveřejném configu přidat:
+
+   ```php
+   define('STATION_UPLOAD_ID', 'IMOST71');
+   define('STATION_UPLOAD_KEY', '<vlastni-nahodny-klic-32-znaku>');
+   ```
+
+   Klíč vygenerovat lokálně například `php -r "echo bin2hex(random_bytes(16));"`.
+   Nahradit ukázkovou hodnotu; minimum je 32 znaků. ID pro přímý příjem může
+   být jiné než `IMOST71`, ale všechny záznamy se ukládají pod `WU_STATION_ID`,
+   aby stávající stránky viděly data. Bez `STATION_UPLOAD_ID` se použije
+   `WU_STATION_ID`. Použít **jiný klíč** než WU Station Key, WU API key a CRON token.
+4. V nastavení vlastního serveru Sencoru (sekce *Weather Server Setup*, třetí
+   blok) zadat do pole **URL jen název přijímacího serveru** – bez `http://`
+   a bez cesty –, v ověřeném nasazení `station.oubrix.eu` podle podrobného návodu,
+   zvolené Station ID a nový Station Key.
+   Odesílání na Weather Underground i Weathercloud ponechat zapnuté.
+   Ověřený firmware 2.06 pole URL bere jako hostitele, sám posílá HTTP GET na
+   `http://<URL>/weatherstation/updateweatherstation.php` (port 80, bez HTTPS,
+   bez nutnosti přesměrování). Na hlavní doméně kořenový `.htaccess` tuto
+   cestu směruje na `station-upload.php` a vyjímá ji z vynucení HTTPS.
+   Na ověřené přímé subdoméně se používá předávací PHP soubor z podrobného návodu.
+   Klíč tak putuje otevřeně – musí být jedinečný a nepoužitý jinde.
+   Zamítnutý požadavek zapisuje do logu cestu, názvy parametrů a shodu
+   ID/klíče (bez hodnot).
+5. Zajistit, aby `fetch_weather.php`, staré kopie CRONu nebo jiné importéry
+   nezapisovaly souběžně mimo tento společný mechanismus.
+6. Sledovat neveřejné logy `/www/domains/station-upload.log` a
+   `/www/domains/fetch_weather2.log` (nové řádky mají čas UTC se suffixem `Z`).
+   Přímý příjem: `OK`, následně `UPDATED` či `EXISTS`; CRON: `SKIP`.
+   Při výpadku pouze vlastního serveru na stanici po 10 minutách očekávat
+   WU `OK`/`UPDATED`/`EXISTS`; po obnovení přímého příjmu opět `SKIP`.
+   Nevypínat při této zkoušce Wi-Fi celé stanice, jinak vypadne i odesílání na WU.
+   `NODATA http=204` znamená, že ani WU aktuální data nemá.
+   HTTP 400 znamená vadná/starší data, 403 špatné přihlašovací údaje,
+   503 chybu konfigurace, migrace či DB. `DENIED` po pouhém otevření URL
+   bez údajů stanice je očekávané.
+
+Oba sběrné endpointy musí být na hostingu/CDN vyřazené z cache.
+Záloha řeší výpadek přímého doručování; při výpadku celé DB nebo hostingu
+nemůže zapisovat ani jeden zdroj.
+Vlastní logy klíče neobsahují, ale firmware je může posílat v query stringu:
+access logy hostingu/CDN mohou `PASSWORD` zaznamenat. Přístup k nim chraňte,
+pokud hosting dovolí, nastavte maskování, a logy nesdílejte bez odstranění
+hesel a tokenů. Neupravujte ani neposílejte skutečný config do repozitáře.
+
+Lokální kontrola: `php tests/run.php` zahrnuje jednotkové testy převodů,
+času a desetiminutového limitu. Pro volitelný integrační test MySQL nastavit
+`WEATHER_INGEST_MYSQL_DSN` (např. `mysql:host=127.0.0.1;port=33379;charset=utf8mb4`),
+`WEATHER_INGEST_MYSQL_USER` a `WEATHER_INGEST_MYSQL_PASS` a spustit stejný příkaz.
+Použít pouze oddělený testovací server: test potřebuje oprávnění vytvářet DB
+a triggery; vytvoří a odstraní vlastní náhodně pojmenovanou databázi.
+Ověřuje souběh procesů, návrat primárního zdroje, rollback a HTTP endpointy.
+Nepřipojuje se na WU ani nečte produkční hesla.
+
+### Nahrání webové aplikace
 
 1. Nahrát do `/www/domains/oubrix.eu/Weather/` (zachovat strukturu):
    `bootstrap.php`, `config/`, `app/`, `public/`, `resources/`, `bin/`, `storage/`
@@ -815,33 +967,52 @@ hranice a offline nástroje nejsou potřeba pro běžný provoz API.
 
 ### `api/comparison.php`
 
-Stránka [Srovnání s Kopisty](public/comparison.php) porovnává teplotu vlastní
-stanice a ČHMÚ Kopisty (`0-20000-0-11433`) v °C za **24 uzavřených UTC hodin**.
+Stránka [Srovnání s Kopisty](public/comparison.php) porovnává teplotu (°C),
+rychlost větru (km/h) a hodinové srážky (mm) vlastní stanice a ČHMÚ Kopisty
+(`0-20000-0-11433`) za **24 uzavřených UTC hodin**. Veličina se přepíná nad grafem;
+tabulka, jednotky i souhrn se přizpůsobí výběru.
 Endpoint nemá volitelné období: další parametry vracejí 400. Surová vlastní
-řada je omezena na 25 hodin a 3000 záznamů; z ČHMÚ se načtou nejvýše dva
+řada je omezena na 26 hodin a 3000 záznamů (včetně předchozího stavu srážkového čítače);
+z ČHMÚ se načtou nejvýše dva
 denní desetiminutové JSON soubory a aktuální metadata stanice, prvků a kvality.
 Veřejný klient nikdy nepředává URL upstreamu.
 
-Obě řady se samostatně agregují prostým průměrem dostupných vzorků do hodin
+Teplota a vítr se samostatně agregují prostým průměrem dostupných vzorků do hodin
 `[začátek, konec)`. Nejde o oficiální hodinový produkt ČHMÚ ani důkaz úplnosti
 hodiny. Tabulka uvádí počty přijatých vzorků i vyloučených hodnot Kopist.
-ČHMÚ se přijímá jen s kvalitou **0 (Good)** a bez příznaku; neznámá kvalita,
-odhad nebo chybějící hodnota nevstupují do průměru. API zveřejňuje počty
-kódů kvality a příznaků. Vzorky stejného času s konfliktními hodnotami
+Ověřená řada ČHMÚ přijímá jen kvalitu **0 (Good)** bez příznaku. Kvalita
+**5 (Unknown)** se zobrazuje zvlášť přerušovanou čarou: při jejím výskytu
+je celý hodinový agregát z Good + Unknown označen jako neověřený, stejně jako
+jeho rozdíl. Odhady, podezřelé, chybějící a označené hodnoty se nepoužijí.
+API vrací `metrics.temperature`, `metrics.wind` a `metrics.precipitation`
+s vlastními `items`, `unit` a `summary`; původní kořenové `items` a `summary`
+nadále obsahují teplotní řadu Good-only. Neověřené hodnoty jsou v
+`kopistyUnverified` a `unverifiedDifference`, počty v `kopistyUnknownSamples`.
+Vzorky stejného času s konfliktními hodnotami
 se vyloučí. Mezery nejsou nuly a nedoplňuje se do nich poslední známá hodnota.
 
 Rozdíl je `OuBrix − Kopisty` pouze pro hodiny, v nichž mají obě řady hodnotu.
 Časy se zobrazují v Europe/Prague s UTC posunem, takže se rozliší obě
 opakované hodiny při konci letního času. Kopisty jsou jiná lokalita asi
 5,2 km od OuBrix; poloha a nadmořská výška se načítají z aktuálních metadat.
-Jednotka ČHMÚ musí být potvrzena jako °C, nikoli odhadnuta podle hodnot.
+Jednotky prvků ČHMÚ `T`, `F`, `SRA10M` se ověřují v metadatech (°C, m/s, mm).
+Vítr ČHMÚ se násobí 3,6; vlastní vítr je již v km/h.
+
+Srážky ČHMÚ jsou součtem šesti desetiminutových úhrnů za intervaly končící
+v `(začátek, konec]`; chybějící interval znamená neúplnou hodinu a hodnotu `null`.
+Srážky OuBrix jsou přibližným součtem přírůstků denního čítače `precip_total`,
+nikoli průměrem intenzity `precip_rate`. Přírůstek se přiřadí konci intervalu
+měření; hranice se mohou od celé hodiny lišit nejvýše o 10 minut.
+Mezera přes 10 minut, chybějící čítač, jeho pokles nebo přechod místní půlnoci
+zneplatní hodinu. Neznámý úhrn při resetu se nenahrazuje nulou.
 
 Výpadek ČHMÚ nezablokuje vlastní řadu a výpadek DB nezablokuje Kopisty;
 pokud selžou oba zdroje, API vrátí 503. Zastaralá gateway cache je označená.
 Metadata se obnovují po UTC datech (TTL 24 h), měření po 15 minutách.
-Hodnoty neznámé kvality mohou způsobit prázdnou řadu i při dostupném souboru;
-stránka tento stav vysvětluje. Srážky a vítr nejsou do této první verze
-srovnání zahrnuté.
+Hodnoty neznámé kvality již nezpůsobí prázdný graf při dostupných měřeních,
+ale nejsou vydávány za ověřené. Neúplné srážkové hodiny zůstávají mezerami.
+Frontend lze ověřit příkazy `node tests\Frontend\ComparisonTest.mjs`
+a `node tests\Frontend\TemperaturePrecisionTest.mjs`; backend příkazem `php tests\run.php`.
 
 ### `api/phenology.php`
 

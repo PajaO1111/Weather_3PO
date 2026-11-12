@@ -16,6 +16,8 @@ return static function (): int {
     ClimateFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/ForecastFixtures.php';
     ForecastFixtures::cache($cache);
+    require_once dirname(__DIR__) . '/support/MostForecastFixtures.php';
+    MostForecastFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/WarningFixtures.php';
     WarningFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/RadarFixtures.php';
@@ -26,13 +28,22 @@ return static function (): int {
     AirQualityMapFixtures::cache($cache);
     require_once dirname(__DIR__) . '/support/AirQualityHistoryFixtures.php';
     AirQualityHistoryFixtures::cache($cache);
-    $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache]);
+    require_once dirname(__DIR__) . '/support/ComparisonFixtures.php';
+    ComparisonFixtures::cache($cache);
+    $secretConfig = $cache . DIRECTORY_SEPARATOR . 'test-config.php';
+    file_put_contents($secretConfig, "<?php\n"
+        . "foreach (['DB_HOST'=>'localhost','DB_PORT'=>3306,'DB_NAME'=>'test','DB_USER'=>'test','DB_PASS'=>'test','WU_STATION_ID'=>'TEST'] as \$k=>\$v) { if (!defined(\$k)) define(\$k,\$v); }\n"
+        . "define('PHENOLOGY_ADMIN_PASSWORD_HASH'," . var_export(password_hash('test-only-password', PASSWORD_DEFAULT), true) . ");\n");
+    $updateDirectory = $cache . DIRECTORY_SEPARATOR . 'phenology-update';
+    $environment = array_merge(getenv(), ['WEATHER_CHMI_CACHE_DIR' => $cache,
+        'WEATHER_CONFIG' => $secretConfig, 'WEATHER_PHENOLOGY_UPDATE_DIR' => $updateDirectory]);
     $process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes, $root, $environment);
     check(is_resource($process), 'server start');
 
     /** @return array{0:int,1:string,2:string} [status, content-type, body] */
-    $request = static function (string $path, string $method = 'GET') use ($port): array {
-        $context = stream_context_create(['http' => ['method' => $method, 'ignore_errors' => true, 'timeout' => 10]]);
+    $request = static function (string $path, string $method = 'GET', string $headers = '') use ($port): array {
+        $context = stream_context_create(['http' => ['method' => $method, 'header' => $headers,
+            'ignore_errors' => true, 'timeout' => 10]]);
         $body = @file_get_contents("http://127.0.0.1:$port$path", false, $context);
         $headers = isset($http_response_header) ? $http_response_header : [];
         $status = 0;
@@ -215,6 +226,18 @@ return static function (): int {
         [$status, $type, $body] = $request('/comparison.php');
         check($status === 200 && strpos($body, 'data-api="/api/comparison.php"') !== false, 'comparison page and api wired');
         check(strpos($body, 'js/comparison.js') !== false && strpos($body, 'Kopisty') !== false, 'comparison module and navigation');
+        check(strpos($body, 'comparison-metric') !== false && strpos($body, 'Rychlost větru') !== false
+            && strpos($body, 'Srážky') !== false, 'comparison page provides all three metric selectors');
+        [$status, $type, $body] = $request('/api/comparison.php');
+        $comparison = json_decode($body, true);
+        check($status === 200 && count($comparison['metrics']) === 3 && count($comparison['items']) === 24,
+            'comparison API preserves temperature contract and exposes three metric series');
+        foreach (['temperature' => 8.0, 'wind' => 14.4, 'precipitation' => 0.6] as $name => $value) {
+            $series = $comparison['metrics'][$name];
+            check(count($series['items']) === 24 && $series['items'][1]['kopistyUnverified'] === $value
+                && $series['items'][1]['kopisty'] === null && $series['items'][1]['kopistyUnknownSamples'] === 6,
+                'comparison API handles Unknown independently for ' . $name);
+        }
         check($request('/api/comparison.php', 'POST')[0] === 405, 'comparison rejects POST');
         check($request('/api/comparison.php?hours=999')[0] === 400, 'comparison has bounded fixed window');
         [$status, $type, $body] = $request('/climate.php');
@@ -270,21 +293,42 @@ return static function (): int {
             && $request('/api/phenology.php?extra=1')[0] === 400
             && $request('/api/phenology.php', 'POST')[0] === 405, 'phenology API rejects invalid query and method');
         check($request('/assets/js/phenology.js')[0] === 200, 'phenology module served');
+        check($request('/api/phenology-update.php')[0] === 405
+            && $request('/api/phenology-update.php', 'OPTIONS')[0] === 405, 'update only accepts POST, no CORS preflight');
+        check($request('/api/phenology-update.php', 'POST')[0] === 401, 'update requires password header');
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            [$status, , $body] = $request('/api/phenology-update.php', 'POST', "X-Phenology-Password: wrong\r\n");
+            check($status === 401 && json_decode($body, true)['error']['code'] === 'AUTH_INVALID',
+                'wrong update password rejected');
+        }
+        check($request('/api/phenology-update.php', 'POST', "X-Phenology-Password: test-only-password\r\n")[0] === 429,
+            'five failures block further attempts');
+        file_put_contents($updateDirectory . DIRECTORY_SEPARATOR . 'attempts.json', '[]');
+        $updateLock = fopen($updateDirectory . DIRECTORY_SEPARATOR . 'update.lock', 'c+');
+        flock($updateLock, LOCK_EX);
+        check($request('/api/phenology-update.php', 'POST', "X-Phenology-Password: test-only-password\r\n")[0] === 409,
+            'concurrent update is rejected');
+        flock($updateLock, LOCK_UN);
+        fclose($updateLock);
         [$status, $type, $body] = $request('/forecast.php');
         check($status === 200 && strpos($type, 'text/html') === 0
             && strpos($body, 'data-api="/api/forecast.php"') !== false, 'forecast page wired');
         check(strpos($body, 'js/forecast.js') !== false
-            && strpos($body, 'není lokální předpovědí pro Most') !== false, 'forecast module and geographical disclaimer');
+            && strpos($body, 'Předpověď počasí pro Most') !== false
+            && strpos($body, '280 m n. m.') !== false
+            && strpos($body, 'https://www.chmi.cz/meteogram/282-most') !== false,
+            'Most forecast module and official direct meteogram link');
         check(strpos($body, 'aria-current="page"') !== false
             && strpos($body, ' Menu</summary>') !== false
             && strpos($body, 'js/navigation.js') !== false, 'native accessible navigation, enhancement script and active page');
         [$status, $type, $body] = $request('/api/forecast.php');
         $forecast = json_decode($body, true);
         check($status === 200 && strpos($type, 'application/json') === 0
-            && count($forecast['items'][0]['sections']) === 3, 'actual forecast API with fixture');
-        check($forecast['items'][0]['status'] === 'published'
-            && $forecast['items'][0]['endTime'] === null && $forecast['meta']['source']['cacheStatus'] === 'fresh',
-            'forecast API preserves absent expiry and source provenance');
+            && count($forecast['hours']) === 4, 'Most forecast API returns hourly fixture');
+        check($forecast['location']['name'] === 'Most' && $forecast['location']['model'] === 'ALADIN'
+            && $forecast['hours'][0]['temperatureC'] === 6.5
+            && $forecast['meta']['source']['cacheStatus'] === 'fresh',
+            'Most forecast API preserves point metadata, values and cache provenance');
         check($request('/api/forecast.php', 'POST')[0] === 405
             && $request('/api/forecast.php?station=Most')[0] === 400, 'forecast rejects method and arbitrary parameters');
         check($request('/assets/js/forecast.js')[0] === 200 && $request('/assets/js/navigation.js')[0] === 200,
@@ -335,7 +379,7 @@ return static function (): int {
         ], JSON_THROW_ON_ERROR));
         [$status, , $body] = $request('/api/radar.php');
         check($status === 503 && json_decode($body, true)['error']['code'] === 'RADAR_UNAVAILABLE', 'invalid radar source not empty success');
-        return 94;
+        return 108;
     } finally {
         $status = proc_get_status($process);
         if ($status['running']) {
@@ -347,6 +391,11 @@ return static function (): int {
             }
         }
         proc_close($process);
+        unlink($secretConfig);
+        foreach (['attempts.json', 'update.lock'] as $name) {
+            if (is_file($updateDirectory . DIRECTORY_SEPARATOR . $name)) unlink($updateDirectory . DIRECTORY_SEPARATOR . $name);
+        }
+        if (is_dir($updateDirectory)) rmdir($updateDirectory);
         foreach (glob($cache . DIRECTORY_SEPARATOR . '*.json') ?: [] as $file) unlink($file);
         rmdir($cache);
     }

@@ -24,15 +24,26 @@ globalThis.document = {
     createElement: element,
 };
 document.getElementById('forecast').dataset.api = '/api/forecast.php';
-const item = {
-    mainHeadline: 'Předpověď na noc', sent: '2026-10-27T21:00:00Z', startTime: '2026-10-27T21:00:00Z',
-    endTime: null, ageSeconds: 3660, stale: false, status: 'published',
-    sections: [{ headline: null, text: '<img src=x onerror=alert(1)>' },
-        { headline: 'Počasí:', text: 'Slabý vítr.\nMísty mlhy.' }],
-};
+
+const now = Date.now();
+const firstHour = new Date(now - 30 * 60 * 1000);
+firstHour.setMinutes(0, 0, 0);
+const hours = Array.from({ length: 28 }, (_, index) => ({
+    time: new Date(firstHour.getTime() + index * 60 * 60 * 1000).toISOString(),
+    temperatureC: index - 4,
+    precipitationMm: index === 1 ? 0.4 : 0,
+    snowMm: 0,
+    windSpeedMs: index === 3 ? 8 : 2,
+    windGustMs: index === 3 ? 11 : 3,
+    windDirectionDeg: 45,
+    pressureHpa: 1020 + index / 10,
+    cloudCoverPct: 50,
+    icon: 40,
+}));
 const payload = {
-    items: [item],
-    meta: { warnings: [], source: { fetchedAt: '2026-10-27T22:00:00Z', cacheStatus: 'fresh' } },
+    location: { name: 'Most', model: 'ALADIN', pointElevationM: 280, pointId: 282 },
+    hours,
+    meta: { warnings: [], source: { fetchedAt: new Date(now).toISOString(), ageSeconds: 0, cacheStatus: 'fresh' } },
 };
 let fail = false;
 let calls = 0;
@@ -44,32 +55,29 @@ globalThis.fetch = async url => {
         : { ok: true, json: async () => structuredClone(payload) };
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
+const textTree = node => [node.textContent, ...node.children.map(textTree)].join(' ');
+const findImageSource = node => node.src || node.children.map(findImageSource).find(Boolean);
 await import('../../public/assets/js/forecast.js');
 await settle();
 const cards = document.getElementById('forecast-items');
-let body = cards.children[0].children[0];
-assert.equal(body.children[0].textContent, 'Předpověď na noc');
-assert.match(body.children[2].textContent, /stáří 1 h 1 min/);
-assert.match(body.children[2].textContent, /Konec platnosti zdroj neuvádí/);
-assert.equal(body.children[3].textContent, '<img src=x onerror=alert(1)>');
-assert.equal(body.children[4].textContent, 'Počasí:');
-assert.equal(body.children[5].textContent, 'Slabý vítr.\nMísty mlhy.');
+assert.ok(cards.children.length >= 2, 'hourly forecast is grouped into local-day cards');
+assert.match(textTree(cards), /Teplota/);
+assert.match(textTree(cards), /Srážky/);
+assert.match(textTree(cards), /Sníh/);
+assert.match(textTree(cards), /Vítr/);
+assert.match(textTree(cards), /Tlak/);
+assert.equal(findImageSource(cards), 'https://www.chmi.cz/o/chmu-theme/images/icon/40.svg');
+assert.match(document.getElementById('forecast-source').textContent, /Model ALADIN.*bod ČHMÚ 282, 280 m n\. m\./);
 assert.equal(document.getElementById('forecast').attributes.get('aria-busy'), 'false');
-item.status = 'stale';
-item.mainHeadline = null;
-payload.meta.warnings = ['Zastaralé vydání.'];
-payload.meta.source.cacheStatus = 'stale';
+
 const reload = () => document.getElementById('forecast-reload').events.get('click')();
+payload.meta.warnings = ['Zastaralá cache.'];
 reload();
 reload();
 await settle();
 assert.equal(calls, 2);
-body = cards.children[0].children[0];
-assert.equal(body.children[0].textContent, 'Předpověď ČHMÚ');
-assert.equal(body.children[1].textContent, 'Zastaralé vydání');
-assert.match(cards.children[0].className, /border-warning/);
 assert.equal(document.getElementById('forecast-warning').classList.contains('d-none'), false);
-assert.match(document.getElementById('forecast-source').textContent, /stará cache/);
+
 fail = true;
 reload();
 await settle();
@@ -79,6 +87,6 @@ assert.equal(document.getElementById('forecast-reload').disabled, false);
 fail = false;
 reload();
 await settle();
-assert.equal(cards.children.length, 1);
+assert.ok(cards.children.length >= 2);
 assert.equal(document.getElementById('forecast-error').classList.contains('d-none'), true);
-console.log('PASS forecast frontend: safe text, optional headings, timestamps, stale state, failure and retry.');
+console.log('PASS Most forecast frontend: daily ALADIN cards, metrics, icons, source, stale warning and retry.');

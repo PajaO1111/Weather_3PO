@@ -41,11 +41,15 @@ $files = [
     'Unit/ClimateServiceTest.php',
     'Unit/PhenologyImportServiceTest.php',
     'Unit/PhenologyServiceTest.php',
+    'Unit/PhenologyUpdateServiceTest.php',
     'Unit/ForecastServiceTest.php',
+    'Unit/MostForecastServiceTest.php',
     'Unit/WarningServiceTest.php',
     'Unit/RadarServiceTest.php',
     'Unit/FetchPrecisionTest.php',
+    'Unit/WeatherIngestTest.php',
     'Integration/CurrentConditionsTest.php',
+    'Integration/WeatherIngestMysqlTest.php',
     'Integration/HttpTest.php',
 ];
 

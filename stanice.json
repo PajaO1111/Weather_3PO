@@ -1,0 +1,28 @@
+{
+  "timeUtc": "2026-11-09T22:07:17+00:00",
+  "method": "GET",
+  "path": "/weatherstation/updateweatherstation.php",
+  "fields": [
+    "ID",
+    "PASSWORD",
+    "action",
+    "realtime",
+    "rtfreq",
+    "dateutc",
+    "baromin",
+    "tempf",
+    "dewptf",
+    "humidity",
+    "windspeedmph",
+    "windgustmph",
+    "winddir",
+    "rainin",
+    "dailyrainin",
+    "solarradiation",
+    "UV",
+    "indoortempf",
+    "indoorhumidity"
+  ],
+  "hasId": true,
+  "hasPassword": true
+}

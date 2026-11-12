@@ -32,6 +32,12 @@ final class ChmiGateway
             'ttl' => 1800,
             'maxBytes' => 1000000,
         ],
+        'forecast_most' => [
+            'path' => '/api/graphs/graf.meteogram/282',
+            'url' => 'https://data-provider.chmi.cz/api/graphs/graf.meteogram/282',
+            'ttl' => 1800,
+            'maxBytes' => 250000,
+        ],
         'climate_history_station' => [
             'path' => '/meteorology/climate/historical/metadata/meta1.json',
             'ttl' => 604800,
@@ -289,6 +295,19 @@ final class ChmiGateway
     /**
      * Pevné HTTPS adresy a odvozené radarové názvy brání použití klienta jako proxy.
      */
+    public function fetchPhenology(string $path): string
+    {
+        if (preg_match('~^(wood_species|herbs)/(data|metadata)/(?:[A-Za-z0-9_]{1,90}\.csv)?$~D', $path) !== 1) {
+            throw new RuntimeException('Nepovolená cesta fenologických dat ČHMÚ.');
+        }
+        $limit = 2000000;
+        $body = ($this->transport)(self::BASE_URL . '/meteorology/phenology/' . $path, $limit);
+        if (!is_string($body) || $body === '' || strlen($body) > $limit) {
+            throw new RuntimeException('Prázdná nebo příliš velká odpověď fenologie ČHMÚ.');
+        }
+        return $body;
+    }
+
     private function request(string $url, int $maxBytes): string
     {
         $context = stream_context_create([

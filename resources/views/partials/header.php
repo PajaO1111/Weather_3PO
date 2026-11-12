@@ -42,8 +42,9 @@ $icon = static function (string $id): string {
 <a class="visually-hidden-focusable" href="#obsah">Přeskočit na obsah</a>
 <header class="app-header border-bottom">
     <nav class="weather-navigation container-fluid wx-wide" aria-label="Hlavní navigace">
-        <a class="navbar-brand fw-semibold weather-brand" href="<?= View::e($baseUrl) ?>/index.php">
-            <span aria-hidden="true">⛅</span> <?= View::e($appName) ?>
+        <a class="navbar-brand weather-brand" href="<?= View::e($baseUrl) ?>/index.php">
+            <img class="weather-brand-logo" src="<?= View::e(View::asset('images/oubrix_weather_logo_horizontal.png')) ?>"
+                 alt="<?= View::e($appName) ?>">
         </a>
         <ul class="weather-iconbar list-unstyled mb-0">
 <?php foreach ($groups as $label => $menu): ?>

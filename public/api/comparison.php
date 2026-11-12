@@ -1,6 +1,6 @@
 <?php
 /**
- * Porovnání teploty OuBrix a Kopist bez závislosti dostupnosti jedné řady na druhé.
+ * Porovnání teploty, srážek a větru OuBrix a Kopist.
  */
 declare(strict_types=1);
 
@@ -30,7 +30,7 @@ $kopisty = null;
 $warnings = [];
 try {
     $repository = new ObservationRepository(Database::connection(WEATHER_ROOT));
-    $local = (new ObservationService($repository))->window(Database::stationId(), 25, $now, 3000);
+    $local = (new ObservationService($repository))->window(Database::stationId(), 26, $now, 3000);
     if ($local['meta']['truncated']) {
         $warnings[] = 'Vlastní řada dosáhla limitu počtu měření; pokrytí může být neúplné.';
     }

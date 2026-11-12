@@ -1,6 +1,6 @@
 <?php
 /**
- * Ověření metadat a teploty Kopist z denních desetiminutových JSON souborů.
+ * Ověření metadat a měření Kopist z denních desetiminutových JSON souborů.
  */
 declare(strict_types=1);
 
@@ -15,6 +15,11 @@ use OuBrix\Weather\Weather\Support\ChmiJson;
 final class KopistyService
 {
     public const WSI = '0-20000-0-11433';
+    public const ELEMENTS = [
+        'T' => ['field' => 'temp_c', 'unit' => '°C'],
+        'F' => ['field' => 'wind_speed', 'unit' => 'm/s'],
+        'SRA10M' => ['field' => 'precip_mm', 'unit' => 'mm'],
+    ];
 
     /** @var ChmiGateway */
     private $gateway;
@@ -49,14 +54,16 @@ final class KopistyService
         if ($station === null) {
             throw new RuntimeException('Kopisty nejsou v aktuálních metadatech dostupné.');
         }
-        $unit = null;
+        $units = [];
         foreach (ChmiJson::rows($meta2, ['OBS_TYPE', 'WSI', 'EG_EL_ABBREVIATION', 'UN_DESCRIPTION']) as $row) {
-            if ($row['WSI'] === self::WSI && $row['OBS_TYPE'] === '10M' && $row['EG_EL_ABBREVIATION'] === 'T') {
-                $unit = trim((string) $row['UN_DESCRIPTION']);
+            if ($row['WSI'] === self::WSI && $row['OBS_TYPE'] === '10M' && isset(self::ELEMENTS[$row['EG_EL_ABBREVIATION']])) {
+                $units[$row['EG_EL_ABBREVIATION']] = trim((string) $row['UN_DESCRIPTION']);
             }
         }
-        if ($unit !== '°C') {
-            throw new RuntimeException('Jednotka teploty Kopist není potvrzena jako °C.');
+        foreach (self::ELEMENTS as $element => $definition) {
+            if (($units[$element] ?? null) !== $definition['unit']) {
+                throw new RuntimeException('Jednotka prvku Kopist ' . $element . ' není potvrzena jako ' . $definition['unit'] . '.');
+            }
         }
         $qualities = [];
         foreach (ChmiJson::rows($meta4, ['FLAG2', 'DESCRIPTION']) as $row) {
@@ -72,7 +79,7 @@ final class KopistyService
                 $document = $this->load('kopisty_' . $day->format('Ymd'), $sources);
                 $dailyPoints = [];
                 foreach (ChmiJson::rows($document, ['STATION', 'ELEMENT', 'DT', 'VAL', 'FLAG', 'QUALITY']) as $row) {
-                    if ($row['STATION'] !== self::WSI || $row['ELEMENT'] !== 'T') {
+                    if ($row['STATION'] !== self::WSI || !isset(self::ELEMENTS[$row['ELEMENT']])) {
                         continue;
                     }
                     $time = ChmiJson::time($row['DT']);
@@ -83,7 +90,8 @@ final class KopistyService
                     $value = $row['VAL'] === null ? null : ChmiJson::number($row['VAL']);
                     $dailyPoints[] = [
                         'time' => $time,
-                        'temp_c' => $quality === 0.0 && $row['FLAG'] === '' ? $value : null,
+                        'element' => $row['ELEMENT'],
+                        self::ELEMENTS[$row['ELEMENT']]['field'] => $value,
                         'quality' => $quality,
                         'qualityLabel' => $qualities[(string) $quality] ?? 'Neznámá kvalita',
                         'flag' => (string) $row['FLAG'],
@@ -104,7 +112,8 @@ final class KopistyService
             'station' => $station,
             'items' => $points,
             'meta' => [
-                'unit' => $unit,
+                'unit' => $units['T'],
+                'units' => $units,
                 'sourceCreatedAt' => ChmiJson::time($meta1['datumVytvoreni'] ?? null),
                 'sourceVersion' => (string) ($meta1['verzeDat'] ?? ''),
                 'sources' => $sources,

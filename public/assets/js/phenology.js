@@ -342,7 +342,7 @@ async function load(query) {
         });
         const body = await response.json();
         if (!response.ok) {
-            throw new Error(body.message || 'Fenologická data nelze načíst.');
+            throw new Error(body.error?.message || 'Fenologická data nelze načíst.');
         }
         payload = body;
         render(payload);
@@ -382,5 +382,36 @@ form.addEventListener('submit', event => {
 });
 document.addEventListener('weather:themechange', () => payload && !busy && showCharts(payload));
 window.addEventListener('resize', () => charts.forEach(chart => chart.resize()));
+
+document.getElementById('phenology-update-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = document.getElementById('phenology-update-submit');
+    if (button.disabled) return;
+    const password = document.getElementById('phenology-password');
+    const status = document.getElementById('phenology-update-status');
+    button.disabled = true;
+    password.disabled = true;
+    status.textContent = 'Kontroluji soubory ČHMÚ a případně importuji změny…';
+    try {
+        const request = fetch(root.dataset.updateApi, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-Phenology-Password': encodeURIComponent(password.value) },
+            credentials: 'same-origin',
+            cache: 'no-store',
+        });
+        password.value = '';
+        const response = await request;
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error?.message || 'Kontrola dat selhala.');
+        status.textContent = body.message;
+        if (body.status === 'updated') await load({});
+    } catch (exception) {
+        status.textContent = `${exception.message || 'Kontrola dat selhala.'} Při přerušení spojení mohl import doběhnout; ověřte datum importu obnovením stránky.`;
+    } finally {
+        password.value = '';
+        password.disabled = false;
+        button.disabled = false;
+    }
+});
 
 load({});

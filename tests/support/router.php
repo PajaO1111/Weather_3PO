@@ -64,6 +64,7 @@ $scripts = ['/' => '/index.php', '/index.php' => '/index.php', '/api/current.php
     '/comparison.php' => '/comparison.php', '/api/comparison.php' => '/api/comparison.php',
     '/climate.php' => '/climate.php', '/api/climate.php' => '/api/climate.php',
     '/phenology.php' => '/phenology.php', '/api/phenology.php' => '/api/phenology.php',
+    '/api/phenology-update.php' => '/api/phenology-update.php',
     '/forecast.php' => '/forecast.php', '/api/forecast.php' => '/api/forecast.php',
     '/warnings.php' => '/warnings.php', '/api/warnings.php' => '/api/warnings.php',
     '/radar.php' => '/radar.php', '/api/radar.php' => '/api/radar.php',

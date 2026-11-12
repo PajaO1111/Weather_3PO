@@ -128,7 +128,8 @@ final class PhenologyService
             'method' => [
                 'reference' => 'Medián pouze z pozorovaných nástupů; hodnoty „nenastala“ a chybějící záznamy jsou vyloučeny.',
                 'calendar' => 'Přestupné roky se pro meziroční srovnání převádějí na společnou osu 365 dní.',
-                'trend' => 'Řada 2014–2025 je krátká pro klimatický normál nebo spolehlivý trend.',
+                'trend' => 'Dostupná řada ' . min($years) . '–' . max($years)
+                    . ' není klimatický normál; sama o sobě nedokládá spolehlivý dlouhodobý trend.',
             ],
         ];
     }

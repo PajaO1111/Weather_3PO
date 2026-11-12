@@ -65,6 +65,9 @@ return [
     // Volitelná samostatná cache také pro izolované HTTP testy.
     'chmi_cache_dir' => getenv('WEATHER_CHMI_CACHE_DIR') ?: null,
 
+    // Interní pracovní data webové aktualizace fenologie; mimo veřejný adresář.
+    'phenology_update_dir' => getenv('WEATHER_PHENOLOGY_UPDATE_DIR') ?: null,
+
     // Pevné verze knihoven z CDN včetně SRI otisků (CSP domény povoluje cdn.jsdelivr.net).
     'cdn' => [
         'leaflet_css' => [

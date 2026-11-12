@@ -8,4 +8,4 @@ use OuBrix\Weather\Weather\Services\PhenologyService;
 
 Api::run(static function (PDO $pdo, string $station) {
     return (new PhenologyService($pdo))->build($_GET);
-}, 3600);
+});

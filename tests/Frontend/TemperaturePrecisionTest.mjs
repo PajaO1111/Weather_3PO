@@ -11,7 +11,7 @@ assert.equal(formatNumber(null, 1), '–');
 const elements = new Map();
 const element = () => ({
     textContent: '', children: [], dataset: {}, classList: { add() {}, remove() {}, toggle() {} },
-    setAttribute() {}, append(child) { this.children.push(child); },
+    setAttribute() {}, addEventListener() {}, append(child) { this.children.push(child); },
     replaceChildren() { this.children = []; },
 });
 globalThis.document = {
@@ -33,8 +33,12 @@ globalThis.window = {
 globalThis.fetch = async () => ({
     ok: true,
     json: async () => ({
-        items: [{ time: '2026-10-27T18:00:00Z', local: 7.9, kopisty: 8.0,
-            localSamples: 12, kopistySamples: 6, kopistyExcluded: 0, difference: -0.1 }],
+        metrics: { temperature: {
+            items: [{ time: '2026-10-27T18:00:00Z', local: 7.9, kopisty: 8.0,
+                localSamples: 12, kopistySamples: 6, kopistyExcluded: 0, difference: -0.1,
+                kopistyUnverified: null, kopistyUnknownSamples: 0, kopistyUnverifiedExcluded: 0 }],
+            summary: { pairedHours: 1, meanDifference: -0.1, unverifiedPairedHours: 0 },
+        } },
         kopistyStation: null,
         summary: { pairedHours: 1, meanDifference: -0.1 },
         meta: { warnings: [], kopistyQualityCounts: {}, kopistyFlagCounts: {} },
