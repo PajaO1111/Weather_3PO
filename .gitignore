@@ -10,3 +10,4 @@
 *.pdf
 *.md
 !README.md
+!Sencor_implementace.md
